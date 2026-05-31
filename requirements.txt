@@ -1,0 +1,9 @@
+# Eduino_PostPilot - dependencies
+# 설치: pip install -r requirements.txt
+
+streamlit>=1.40        # 사내 공유용 웹 UI
+openai>=1.60           # OpenAI API (GPT-5.4 비전/생성)
+python-dotenv>=1.0     # .env 환경변수 로드
+Pillow>=10.4           # 통이미지 세로분할 + 폭정규화
+tiktoken>=0.8          # 토큰 카운트 (비용 추정/통제)
+# sqlite3 는 Python 표준 라이브러리라 설치 불필요

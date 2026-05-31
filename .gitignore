@@ -1,0 +1,27 @@
+# Eduino_PostPilot - .gitignore
+
+# --- secrets (절대 커밋 금지) ---
+.env
+*.key
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+
+# --- app data (로컬 전용) ---
+data/
+output/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 제품 통이미지 (용량/저작권 - git 제외)
+Product_eduino/
