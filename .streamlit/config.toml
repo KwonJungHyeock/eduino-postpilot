@@ -10,8 +10,8 @@ textColor = "#1e293b"
 font = "sans serif"
 
 [server]
-headless = true          # run.bat이 브라우저를 열므로 자동 오픈 중복 방지
 runOnSave = false
+# headless 미지정(기본 false) → 서버 준비 후 Streamlit이 브라우저를 자동으로 엽니다
 
 [browser]
 gatherUsageStats = false
