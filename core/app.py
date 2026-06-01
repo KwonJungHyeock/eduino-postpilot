@@ -188,7 +188,7 @@ def save_blog(product, blog: str) -> str:
     """블로그를 output에 저장하고 상태를 draft로. (메인 스레드에서 호출)"""
     out_file = config.OUTPUT_DIR / _output_filename(product.code, product.name)
     out_file.write_text(blog, encoding="utf-8")
-    state.set_status(product.code, product.name, "draft")
+    state.set_status(product_key(product), product.name, "draft")
     return str(out_file)
 
 
@@ -203,14 +203,19 @@ def generate_for(product) -> tuple[str, str]:
 #   (Streamlit은 매 rerun마다 탭 3개 본문을 모두 실행하므로, 따로 스캔하면
 #    파일시스템 조회가 3중복으로 일어남. 한 번만 모아 전달해 속도 확보.)
 # ============================================================
+def product_key(p) -> str:
+    """작업 상태 식별 키. 코드는 (수동/크롤링 간) 겹칠 수 있으므로 '폴더명'으로 고유 식별."""
+    return p.folder.name
+
+
 def build_snapshot() -> dict:
     products = image_loader.scan_products()
-    codes = [p.code for p in products]
+    keys = [product_key(p) for p in products]
     return {
         "products": products,
-        "status": state.get_status_map(codes),
-        "updated": state.get_updated_map(codes),
-        "img_count": {p.code: len(image_loader.find_images(p.folder)) for p in products},
+        "status": state.get_status_map(keys),
+        "updated": state.get_updated_map(keys),
+        "img_count": {product_key(p): len(image_loader.find_images(p.folder)) for p in products},
     }
 
 
@@ -236,14 +241,14 @@ def render_manual(snap: dict) -> None:
 
             def fmt(i: int) -> str:
                 p = products[i]
-                return f"{state.STATUS_LABEL.get(status_map.get(p.code, 'none'), '')}  {p.label}"
+                return f"{state.STATUS_LABEL.get(status_map.get(product_key(p), 'none'), '')}  {p.label}"
 
             idx = st.selectbox("제품 목록", range(len(products)), format_func=fmt)
             product = products[idx]
 
             st.write(f"**제품코드** : {product.code}")
             st.write(f"**제품명** : {product.name}")
-            st.write(f"**상태** : {state.STATUS_LABEL.get(status_map.get(product.code, 'none'), '')}")
+            st.write(f"**상태** : {state.STATUS_LABEL.get(status_map.get(product_key(product), 'none'), '')}")
 
             imgs = image_loader.find_images(product.folder)
             if imgs:
@@ -339,7 +344,7 @@ def _render_result(blog: str, product) -> None:
         st.checkbox("소스코드 코드블록 처리")
 
     if st.button("✅ 발행 완료로 표시", use_container_width=True):
-        state.set_status(product.code, product.name, "published")
+        state.set_status(product_key(product), product.name, "published")
         st.success("발행 완료로 표시했습니다. (목록 상태가 🟢로 바뀝니다)")
 
 
@@ -384,8 +389,8 @@ def render_auto(snap: dict) -> None:
                         "failed": [(prod.name or prod.product_no, why)
                                    for prod, why in res.failed],
                     }
-                    # 방금 수집한 제품코드 기록 → '방금 수집분만 생성' 옵션에서 사용
-                    st.session_state["collect_codes"] = [p.code for p in res.created]
+                    # 방금 수집한 제품(폴더 키) 기록 → '방금 수집분만 생성' 옵션에서 사용
+                    st.session_state["collect_keys"] = [product_key(p) for p in res.created]
                     # 방금 수집한 개수에 '생성 편수'를 맞춰 둠(수집=1이면 생성도 1로 제안)
                     if res.created:
                         st.session_state["gen_n"] = len(res.created)
@@ -404,21 +409,21 @@ def render_auto(snap: dict) -> None:
             status_map = snap["status"]
             img_count = snap["img_count"]
 
-            todo_all = [p for p in products if status_map.get(p.code, "none") == "none"]
-            gen_pool = [p for p in todo_all if img_count[p.code] > 0]   # 생성 가능(이미지 있음)
-            no_img = [p for p in todo_all if img_count[p.code] == 0]    # 이미지 없는 폴더
+            todo_all = [p for p in products if status_map.get(product_key(p), "none") == "none"]
+            gen_pool = [p for p in todo_all if img_count[product_key(p)] > 0]   # 생성 가능(이미지 있음)
+            no_img = [p for p in todo_all if img_count[product_key(p)] == 0]    # 이미지 없는 폴더
 
             # '방금 수집한 것만 생성' 옵션 — 순번 빠른 빈 폴더가 먼저 잡히는 문제 방지
-            collect_codes = [c for c in st.session_state.get("collect_codes", [])
-                             if status_map.get(c, "none") == "none" and img_count.get(c, 0) > 0]
+            collect_keys = [k for k in st.session_state.get("collect_keys", [])
+                            if status_map.get(k, "none") == "none" and img_count.get(k, 0) > 0]
             only_new = False
-            if collect_codes:
+            if collect_keys:
                 only_new = st.checkbox(
-                    f"방금 수집한 {len(collect_codes)}개만 생성", value=True,
+                    f"방금 수집한 {len(collect_keys)}개만 생성", value=True,
                     help="끄면 미작업 전체를 순번 빠른 순서대로 생성합니다.",
                 )
             target_pool = (
-                [p for p in gen_pool if p.code in collect_codes] if only_new else gen_pool
+                [p for p in gen_pool if product_key(p) in collect_keys] if only_new else gen_pool
             )
 
             st.write(f"미작업 **{len(todo_all)}개** · 생성 가능 **{len(target_pool)}개**")
@@ -527,14 +532,14 @@ def render_worklist(snap: dict) -> None:
             st.info("아직 제품이 없습니다. [자동 수집·일괄] 탭에서 수집하거나 폴더를 추가하세요.")
             return
 
-        codes = [p.code for p in products]
         status_map = snap["status"]
         updated_map = snap["updated"]
         img_count = snap["img_count"]
+        keys = [product_key(p) for p in products]
 
-        n_none = sum(1 for c in codes if status_map.get(c, "none") == "none")
-        n_draft = sum(1 for c in codes if status_map.get(c) == "draft")
-        n_pub = sum(1 for c in codes if status_map.get(c) == "published")
+        n_none = sum(1 for k in keys if status_map.get(k, "none") == "none")
+        n_draft = sum(1 for k in keys if status_map.get(k) == "draft")
+        n_pub = sum(1 for k in keys if status_map.get(k) == "published")
 
         m1, m2, m3 = st.columns(3)
         m1.metric("⚪ 미작업", n_none)
@@ -549,7 +554,8 @@ def render_worklist(snap: dict) -> None:
 
         rows = []
         for p in products:
-            sts = status_map.get(p.code, "none")
+            k = product_key(p)
+            sts = status_map.get(k, "none")
             if wanted and sts != wanted:
                 continue
             rows.append({
@@ -557,8 +563,8 @@ def render_worklist(snap: dict) -> None:
                 "코드": p.code,
                 "제품명": p.name,
                 "상태": state.STATUS_LABEL.get(sts, sts),
-                "이미지": img_count.get(p.code, 0),
-                "갱신": updated_map.get(p.code, "-"),
+                "이미지": img_count.get(k, 0),
+                "갱신": updated_map.get(k, "-"),
             })
 
         if not rows:
