@@ -14,13 +14,22 @@ import config
 
 def _conn() -> sqlite3.Connection:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(config.STATE_DB)
+    conn = sqlite3.connect(config.STATE_DB, timeout=30)
     conn.execute(
         """CREATE TABLE IF NOT EXISTS product_state (
             code TEXT PRIMARY KEY,
             name TEXT,
             status TEXT DEFAULT 'none',
             updated_at TEXT DEFAULT (datetime('now','localtime'))
+        )"""
+    )
+    # 수집 이력 — 중복 수집 방지는 '상품번호(product_no)' 기준으로 안정적으로 추적
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS collected (
+            product_no TEXT PRIMARY KEY,
+            code TEXT,
+            name TEXT,
+            collected_at TEXT DEFAULT (datetime('now','localtime'))
         )"""
     )
     return conn
@@ -69,6 +78,26 @@ def get_updated_map(codes: list[str]) -> dict[str, str]:
             f"SELECT code, updated_at FROM product_state WHERE code IN ({qs})", codes
         ).fetchall()
     return {code: updated for code, updated in rows}
+
+
+def mark_collected(product_no: str, code: str, name: str) -> None:
+    """상품번호 기준으로 수집 이력 기록(중복 수집 방지용)."""
+    with closing(_conn()) as c:
+        c.execute(
+            """INSERT INTO collected (product_no, code, name, collected_at)
+               VALUES (?,?,?, datetime('now','localtime'))
+               ON CONFLICT(product_no) DO UPDATE SET
+                 code=excluded.code, name=excluded.name,
+                 collected_at=excluded.collected_at""",
+            (product_no, code, name),
+        )
+        c.commit()
+
+
+def collected_product_nos() -> set[str]:
+    """이미 수집한 상품번호 집합."""
+    with closing(_conn()) as c:
+        return {row[0] for row in c.execute("SELECT product_no FROM collected").fetchall()}
 
 
 STATUS_LABEL = {

@@ -40,6 +40,7 @@ import requests
 
 import config
 import image_loader
+import state
 
 # HTML에서 닫는 짝이 없는(void) 태그 — prdDetail 범위 추적 시 깊이를 올리지 않음
 _VOID_TAGS = {
@@ -65,6 +66,12 @@ class CrawledProduct:
     def code(self) -> str:
         """기존 폴더 규칙의 '코드' 자리. Cafe24 상품번호를 그대로 사용(고유·숫자)."""
         return self.product_no
+
+
+@dataclass
+class Detail:
+    custom_code: str | None     # 자체상품코드(Cafe24). 없으면 None → 상품번호로 폴백
+    images: list[bytes]
 
 
 @dataclass
@@ -176,6 +183,54 @@ def parse_product_list(html: str) -> list[CrawledProduct]:
     return [CrawledProduct(no, name) for no, name in by_no.items()]
 
 
+class _DetailInfoParser(HTMLParser):
+    """상세페이지 상품정보 표의 셀(th/td/dt/dd) 텍스트를 등장순으로 모은다.
+    '자체상품코드' 라벨 셀 다음 값 셀을 찾기 위함."""
+
+    _CELL = {"th", "td", "dt", "dd"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cells: list[str] = []
+        self._depth = 0
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._CELL:
+            self._depth += 1
+            self._buf = []
+
+    def handle_data(self, data):
+        if self._depth:
+            self._buf.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in self._CELL and self._depth:
+            self._depth -= 1
+            self.cells.append(" ".join("".join(self._buf).split()))
+            self._buf = []
+
+
+def parse_custom_code(html: str) -> str | None:
+    """상세 HTML에서 '자체상품코드'(Cafe24 custom_product_code) 값을 추출. 없으면 None."""
+    p = _DetailInfoParser()
+    p.feed(html)
+    cells = p.cells
+    for i, text in enumerate(cells):
+        if "자체상품코드" not in text.replace(" ", ""):
+            continue
+        # 같은 셀 안에 값이 붙어있는 경우: "자체상품코드 A-1"
+        m = re.search(r"자체\s*상품\s*코드\s*[:：]?\s*(\S.*)$", text)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+        # 라벨 셀 다음의 값 셀
+        for nxt in cells[i + 1:]:
+            if nxt.strip():
+                return nxt.strip()
+        return None
+    return None
+
+
 def parse_detail_image_urls(html: str, base_url: str) -> list[str]:
     """상세 HTML → 절대 이미지 URL 리스트(순서 유지, 중복 제거)."""
     p = _DetailImgParser()
@@ -224,6 +279,10 @@ class ProductSource:
 
     def fetch_detail_images(self, product: CrawledProduct) -> list[bytes]:
         raise NotImplementedError
+
+    def fetch_detail(self, product: CrawledProduct) -> Detail:
+        """상세(자체상품코드 + 이미지). 기본 구현은 이미지만(코드 None)."""
+        return Detail(custom_code=None, images=self.fetch_detail_images(product))
 
 
 class Cafe24StorefrontSource(ProductSource):
@@ -277,9 +336,7 @@ class Cafe24StorefrontSource(ProductSource):
                     return found
         return found
 
-    def fetch_detail_images(self, product: CrawledProduct) -> list[bytes]:
-        html = self._get_text(self._detail_url(product.product_no))
-        urls = parse_detail_image_urls(html, self.base)[: config.CRAWL_MAX_IMAGES]
+    def _download_images(self, urls: list[str]) -> list[bytes]:
         if not urls:
             return []
 
@@ -296,6 +353,16 @@ class Cafe24StorefrontSource(ProductSource):
             results = list(ex.map(fetch_one, urls))
         return [d for d in results if d]
 
+    def fetch_detail(self, product: CrawledProduct) -> Detail:
+        # 상세 HTML 1회로 자체상품코드 + 이미지 URL을 함께 추출(중복 요청 방지)
+        html = self._get_text(self._detail_url(product.product_no))
+        code = parse_custom_code(html)
+        urls = parse_detail_image_urls(html, self.base)[: config.CRAWL_MAX_IMAGES]
+        return Detail(custom_code=code, images=self._download_images(urls))
+
+    def fetch_detail_images(self, product: CrawledProduct) -> list[bytes]:
+        return self.fetch_detail(product).images
+
 
 # ============================================================
 # 오케스트레이션 — 수집해서 PRODUCTS_ROOT에 저장
@@ -308,6 +375,15 @@ def _safe_name(name: str) -> str:
     name = _WIN_FORBIDDEN.sub(" ", name).replace("_", " ")
     name = " ".join(name.split())
     return name or "제품"
+
+
+def _safe_code(code: str | None) -> str:
+    """자체상품코드를 폴더 '코드' 자리에 안전하게. (_는 구분자라 -로, 금지문자 제거)"""
+    if not code:
+        return ""
+    code = _WIN_FORBIDDEN.sub("", code).replace("_", "-")
+    code = " ".join(code.split())
+    return code
 
 
 def _ext_for(data: bytes, content_type: str) -> str:
@@ -326,10 +402,6 @@ def _ext_for(data: bytes, content_type: str) -> str:
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return ".webp"
     return ".jpg"
-
-
-def _existing_codes(root: Path) -> set[str]:
-    return {p.code for p in image_loader.scan_products(root)}
 
 
 def _next_order(root: Path) -> int:
@@ -359,7 +431,11 @@ def collect_category(
             on_progress(msg)
 
     result = CollectResult()
-    existing = _existing_codes(root) if skip_existing else set()
+    # 중복 판정은 '상품번호' 기준(안정적). DB 수집이력 + 과거(상품번호로 명명된) 폴더를 합산
+    existing = set()
+    if skip_existing:
+        existing |= state.collected_product_nos()
+        existing |= {p.code for p in image_loader.scan_products(root) if p.code.isdigit()}
     order = _next_order(root)
 
     log(f"상품 목록 불러오는 중… (카테고리 {category})")
@@ -375,23 +451,27 @@ def collect_category(
     for i, prod in enumerate(fresh, start=1):
         clean = _safe_name(_clean_product_name(prod.name))   # 라벨 정리 + 폴더명 안전화
         label = clean or f"상품 {prod.product_no}"
-        log(f"[{i}/{len(fresh)}] '{label}' 상세이미지 수집 중…")
+        log(f"[{i}/{len(fresh)}] '{label}' 상세 수집 중…")
         try:
-            blobs = src.fetch_detail_images(prod)
+            detail = src.fetch_detail(prod)
         except requests.RequestException as e:
             result.failed.append((prod, f"상세 페이지 요청 실패: {e}"))
             continue
-        if not blobs:
+        if not detail.images:
             result.failed.append((prod, "상세 이미지를 찾지 못함"))
             continue
 
-        folder = root / f"[{order}] {prod.code}_{clean}"
+        # 표시·파일명용 코드 = 자체상품코드(예: A-1), 없으면 상품번호로 폴백
+        code = _safe_code(detail.custom_code) or prod.product_no
+
+        folder = root / f"[{order}] {code}_{clean}"
         folder.mkdir(parents=True, exist_ok=True)
-        for n, (blob, ct) in enumerate(_with_types(blobs), start=1):
+        for n, (blob, ct) in enumerate(_with_types(detail.images), start=1):
             (folder / f"detail_{n:02d}{_ext_for(blob, ct)}").write_bytes(blob)
 
+        state.mark_collected(prod.product_no, code, clean)   # 상품번호 기준 이력 기록
         saved = image_loader.Product(
-            folder=folder, order=order, code=prod.code, name=clean,
+            folder=folder, order=order, code=code, name=clean,
             image_path=image_loader.find_image(folder),
         )
         result.created.append(saved)
@@ -460,6 +540,18 @@ def _selftest() -> None:
     assert _clean_product_name("상품명 : 아두이노 우노") == "아두이노 우노"
     assert _clean_product_name("상품명아두이노 우노") == "아두이노 우노"
     assert _safe_name("센서/모듈_키트 A:B") == "센서 모듈 키트 A B", _safe_name("센서/모듈_키트 A:B")
+
+    # 자체상품코드 추출
+    info_html = """
+    <table>
+      <tr><th>제조사</th><td>OEM</td></tr>
+      <tr><th>자체상품코드</th><td>A-1</td></tr>
+    </table>"""
+    assert parse_custom_code(info_html) == "A-1", parse_custom_code(info_html)
+    assert parse_custom_code("<dl><dt>자체 상품코드</dt><dd> B-2 </dd></dl>") == "B-2"
+    assert parse_custom_code("<table><tr><th>제조사</th><td>OEM</td></tr></table>") is None
+    assert _safe_code("A_1 / x") == "A-1 x", _safe_code("A_1 / x")
+    assert _safe_code(None) == ""
     assert _ext_for(b"\x89PNG\r\n", "") == ".png"
     assert _ext_for(b"\xff\xd8\xff", "image/jpeg") == ".jpg"
 
