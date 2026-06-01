@@ -43,12 +43,18 @@ def parse_folder_name(folder_name: str) -> tuple[int, str, str] | None:
     return int(m.group(1)), m.group(2).strip(), m.group(3).strip()
 
 
+def find_images(folder: Path) -> list[Path]:
+    """폴더 안의 모든 이미지 파일을 이름순으로. (상세페이지가 여러 장으로 나뉜 경우 대비)"""
+    return [
+        p for p in sorted(folder.iterdir())
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
+    ]
+
+
 def find_image(folder: Path) -> Path | None:
-    """폴더 안의 첫 번째 이미지 파일 경로."""
-    for p in sorted(folder.iterdir()):
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
-            return p
-    return None
+    """폴더 안의 첫 번째 이미지 파일 경로(목록 미리보기/썸네일용)."""
+    imgs = find_images(folder)
+    return imgs[0] if imgs else None
 
 
 def scan_products(root: Path | None = None) -> list[Product]:

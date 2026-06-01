@@ -84,6 +84,20 @@ def extract_from_image(path: str | Path) -> str:
     return extract_from_slices(slices)
 
 
+def extract_from_paths(paths: list[str | Path]) -> str:
+    """여러 장의 통이미지 경로 -> 각각 분할 -> 이어붙여 한 번에 추출.
+
+    상세페이지가 한 장이 아니라 여러 조각 이미지로 나뉜 경우(크롤링 수집분 등)에도
+    위에서 아래로 순서대로 이어붙여 하나의 페이지처럼 분석합니다.
+    """
+    if not paths:
+        raise ValueError("추출할 이미지가 없습니다.")
+    slices = []
+    for p in paths:
+        slices.extend(image_optimizer.optimize(p))
+    return extract_from_slices(slices)
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print('사용법: python vision.py "<통이미지 경로>"')

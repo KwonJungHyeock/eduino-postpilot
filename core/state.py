@@ -46,6 +46,31 @@ def set_status(code: str, name: str, status: str) -> None:
         c.commit()
 
 
+def get_status_map(codes: list[str]) -> dict[str, str]:
+    """여러 제품코드의 상태를 한 번에 조회. 기록이 없으면 'none'."""
+    if not codes:
+        return {}
+    with closing(_conn()) as c:
+        qs = ",".join("?" * len(codes))
+        rows = c.execute(
+            f"SELECT code, status FROM product_state WHERE code IN ({qs})", codes
+        ).fetchall()
+    found = {code: status for code, status in rows}
+    return {code: found.get(code, "none") for code in codes}
+
+
+def get_updated_map(codes: list[str]) -> dict[str, str]:
+    """여러 제품코드의 마지막 갱신시각을 한 번에 조회."""
+    if not codes:
+        return {}
+    with closing(_conn()) as c:
+        qs = ",".join("?" * len(codes))
+        rows = c.execute(
+            f"SELECT code, updated_at FROM product_state WHERE code IN ({qs})", codes
+        ).fetchall()
+    return {code: updated for code, updated in rows}
+
+
 STATUS_LABEL = {
     "none": "⚪ 미작업",
     "draft": "🟡 초안 생성됨",

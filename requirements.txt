@@ -6,4 +6,6 @@ openai>=1.60           # OpenAI API (GPT-5.4 비전/생성)
 python-dotenv>=1.0     # .env 환경변수 로드
 Pillow>=10.4           # 통이미지 세로분할 + 폭정규화
 tiktoken>=0.8          # 토큰 카운트 (비용 추정/통제)
+requests>=2.31         # 쇼핑몰 자동 수집(크롤링) HTTP 요청
+# HTML 파싱은 표준 라이브러리(html.parser)만 사용 — 추가 의존성 없음
 # sqlite3 는 Python 표준 라이브러리라 설치 불필요

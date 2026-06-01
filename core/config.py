@@ -65,6 +65,27 @@ IMAGE_TARGET_WIDTH = 1280
 IMAGE_SLICE_HEIGHT = 1500
 IMAGE_SLICE_OVERLAP = 100
 
+# ------------------------------------------------------------
+# 크롤링 (Cafe24 스토어프론트 자동 수집)
+#   - 쇼핑몰이 Cafe24 기반이라 표준 URL로 상품목록/상세를 수집합니다.
+#   - 지금은 스토어프론트 HTML 스크래핑. 추후 Cafe24 OpenAPI 소스로 교체 가능
+#     (crawler.py 의 ProductSource 인터페이스만 갈아끼우면 됨).
+#   - ⚠ 자사 쇼핑몰만 대상으로, 요청 간격(CRAWL_DELAY_SEC)을 두어 부하를 주지 않습니다.
+# ------------------------------------------------------------
+SHOP_BASE = os.getenv("SHOP_BASE", "https://eduino.cafe24.com").rstrip("/")
+CRAWL_USER_AGENT = os.getenv(
+    "CRAWL_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+)
+CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "2.0"))   # 요청 사이 대기(초)
+CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "20"))          # HTTP 타임아웃(초)
+CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "20"))      # 목록 페이지 탐색 상한
+CRAWL_MAX_IMAGES = int(os.getenv("CRAWL_MAX_IMAGES", "25"))    # 상세이미지 다운로드 상한/제품
+
+# 카테고리 프리셋(선택): "표시이름": cate_no.  비워두면 화면에서 번호 직접 입력.
+CRAWL_CATEGORIES: dict[str, int] = {}
+
 STATE_DB = DATA_DIR / "state.db"
 
 # 폴더 자동 생성
