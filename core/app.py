@@ -240,74 +240,81 @@ def render_generate(snap: dict) -> None:
 
     status_map = snap["status"]
     img_count = snap["img_count"]
-    left, right = st.columns([1, 1.25], gap="large")
 
-    # ---- 왼쪽: 목록에서 선택 → 생성 ----
-    with left:
-        with st.container(border=True):
-            st.markdown('<span class="step-badge">① 생성할 제품 선택</span>', unsafe_allow_html=True)
-            only_todo = st.checkbox("미작업만 보기", value=True)
-            view = [p for p in products
-                    if not only_todo or status_map.get(product_key(p), "none") == "none"]
+    # ---- ① 목록에서 선택 → 생성 (전체 폭: 제품명이 길어 좌우 분할 시 잘림) ----
+    with st.container(border=True):
+        st.markdown('<span class="step-badge">① 생성할 제품 선택</span>', unsafe_allow_html=True)
+        only_todo = st.checkbox("미작업만 보기", value=True)
+        view = [p for p in products
+                if not only_todo or status_map.get(product_key(p), "none") == "none"]
 
-            if not view:
-                st.success("미작업 제품이 없습니다. 모두 생성됐어요! (전체 보기를 끄면 다시 보입니다)")
-            else:
-                rows = [{
-                    "선택": False,
-                    "순번": p.order,
-                    "코드": p.code,
-                    "제품명": p.name,
-                    "상태": state.STATUS_LABEL.get(status_map.get(product_key(p), "none"), ""),
-                    "이미지": img_count.get(product_key(p), 0),
-                } for p in view]
-                edited = st.data_editor(
-                    rows, hide_index=True, use_container_width=True,
-                    column_config={"선택": st.column_config.CheckboxColumn(required=False)},
-                    disabled=["순번", "코드", "제품명", "상태", "이미지"],
-                    key="gen_select",
-                )
-                selected = [view[i] for i, r in enumerate(edited) if r["선택"]]
-                gen_targets = [p for p in selected if img_count.get(product_key(p), 0) > 0]
-                no_img_sel = [p for p in selected if img_count.get(product_key(p), 0) == 0]
+        if not view:
+            st.success("미작업 제품이 없습니다. 모두 생성됐어요! (전체 보기를 끄면 다시 보입니다)")
+        else:
+            rows = [{
+                "선택": False,
+                "순번": p.order,
+                "코드": p.code,
+                "제품명": p.name,
+                "상태": state.STATUS_LABEL.get(status_map.get(product_key(p), "none"), ""),
+                "이미지": img_count.get(product_key(p), 0),
+            } for p in view]
+            edited = st.data_editor(
+                rows, hide_index=True, use_container_width=True,
+                height=min(560, 80 + 35 * len(rows)),   # 행 수에 맞춰 높이 확보(스크롤 최소화)
+                column_config={
+                    "선택": st.column_config.CheckboxColumn(required=False, width="small"),
+                    "순번": st.column_config.NumberColumn(width="small"),
+                    "코드": st.column_config.TextColumn(width="small"),
+                    "제품명": st.column_config.TextColumn(width="large"),   # 가장 넓게
+                    "상태": st.column_config.TextColumn(width="medium"),
+                    "이미지": st.column_config.NumberColumn("이미지", width="small", help="통이미지 장수"),
+                },
+                disabled=["순번", "코드", "제품명", "상태", "이미지"],
+                key="gen_select",
+            )
+            selected = [view[i] for i, r in enumerate(edited) if r["선택"]]
+            gen_targets = [p for p in selected if img_count.get(product_key(p), 0) > 0]
+            no_img_sel = [p for p in selected if img_count.get(product_key(p), 0) == 0]
 
-                est = len(gen_targets) * 200
+            est = len(gen_targets) * 200
+            c1, c2 = st.columns([2, 1])
+            with c1:
                 st.caption(
                     f"선택 {len(selected)}개 · 생성 대상 {len(gen_targets)}개 · "
                     f"예상 과금 약 {est:,}원 (편당 약 200원). 동시 {config.GEN_WORKERS}개 병렬."
                 )
                 if no_img_sel:
                     st.caption(f"⚠ 이미지 없는 {len(no_img_sel)}개는 제외됩니다.")
-
+            with c2:
                 if st.button(f"✨ 선택한 {len(gen_targets)}개 생성", type="primary",
                              disabled=not gen_targets, use_container_width=True):
                     _run_batch(gen_targets)
                     st.rerun()   # 상태 갱신. 결과는 세션에 보관됨
 
-            _render_batch_result()
+        _render_batch_result()
 
-    # ---- 오른쪽: 검토 · 복사 · 발행 ----
-    with right:
-        with st.container(border=True):
-            st.markdown('<span class="step-badge">② 검토 · 복사 · 발행</span>', unsafe_allow_html=True)
-            reviewable = [p for p in products
-                          if status_map.get(product_key(p), "none") in ("draft", "published")]
-            if not reviewable:
-                st.info("생성된 초안이 없습니다. 왼쪽에서 제품을 골라 생성하세요.")
+    # ---- ② 검토 · 복사 · 발행 (전체 폭) ----
+    with st.container(border=True):
+        st.markdown('<span class="step-badge">② 검토 · 복사 · 발행</span>', unsafe_allow_html=True)
+        reviewable = [p for p in products
+                      if status_map.get(product_key(p), "none") in ("draft", "published")]
+        if not reviewable:
+            st.info("생성된 초안이 없습니다. 위에서 제품을 골라 생성하세요.")
+        else:
+            def rfmt(i: int) -> str:
+                p = reviewable[i]
+                return f"{state.STATUS_LABEL.get(status_map.get(product_key(p), 'none'), '')}  {p.label}"
+
+            ridx = st.selectbox("검토할 제품", range(len(reviewable)), format_func=rfmt)
+            product = reviewable[ridx]
+            blog, path = load_draft(product)
+            if not blog:
+                st.warning("초안 파일을 찾을 수 없습니다. 다시 생성해 주세요.")
             else:
-                def rfmt(i: int) -> str:
-                    p = reviewable[i]
-                    return f"{state.STATUS_LABEL.get(status_map.get(product_key(p), 'none'), '')}  {p.label}"
-
-                ridx = st.selectbox("검토할 제품", range(len(reviewable)), format_func=rfmt)
-                product = reviewable[ridx]
-                blog, path = load_draft(product)
-                if not blog:
-                    st.warning("초안 파일을 찾을 수 없습니다. 다시 생성해 주세요.")
-                else:
-                    if path:
-                        st.caption(f"💾 저장됨: {path}")
-                    _render_result(blog, product)
+                if path:
+                    st.caption(f"💾 저장됨: {path}")
+                _render_result(blog, product)
 
 
 def _run_batch(targets: list) -> None:
