@@ -82,6 +82,17 @@ st.markdown(
     .stButton > button:active { transform: scale(.99); }
     .stCode { border-radius:10px; }
     label, .stMarkdown p { color:#334155; }
+
+    /* 아이콘 폰트 복구 — 위의 전역 Pretendard 적용이 머티리얼 아이콘 폰트를
+       덮어써서 체크/화살표가 'check', 'keyboard_arrow_right' 글자로 깨지는 것 방지 */
+    span[data-testid="stIconMaterial"],
+    [data-testid="stExpanderToggleIcon"],
+    [data-testid="stStatusWidget"] span[data-testid^="stIcon"],
+    .material-icons, .material-icons-outlined,
+    .material-symbols-outlined, .material-symbols-rounded {
+        font-family: 'Material Symbols Outlined', 'Material Symbols Rounded',
+                     'Material Icons', 'Material Icons Outlined' !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -325,24 +336,20 @@ def render_auto() -> None:
                             on_progress=lambda m: s.update(label=m),
                         )
                         s.update(label="수집 완료", state="complete")
-                    st.success(
-                        f"신규 {len(res.created)}개 저장 · 건너뜀 {len(res.skipped)}개 · "
-                        f"실패 {len(res.failed)}개"
-                    )
+                    # 결과를 세션에 저장해 rerun(다른 위젯 조작) 후에도 화면에 유지
+                    st.session_state["collect_result"] = {
+                        "created": [p.label for p in res.created],
+                        "skipped": len(res.skipped),
+                        "failed": [(prod.name or prod.product_no, why)
+                                   for prod, why in res.failed],
+                    }
+                    # 방금 수집한 개수에 '생성 편수'를 맞춰 둠(수집=1이면 생성도 1로 제안)
                     if res.created:
-                        st.write("**새로 받은 제품**")
-                        for p in res.created:
-                            st.write(f"- {p.label}")
-                    if res.failed:
-                        with st.expander(f"⚠ 실패 {len(res.failed)}건"):
-                            for prod, why in res.failed:
-                                st.write(f"- {prod.name or prod.product_no}: {why}")
+                        st.session_state["gen_n"] = len(res.created)
                 except Exception as e:
-                    st.error(
-                        f"수집 중 오류: {e}\n\n"
-                        "쇼핑몰 접근이 막혔거나(봇 차단) 카테고리 번호가 틀렸을 수 있습니다. "
-                        "잠시 후 다시 시도하거나 cate_no를 확인하세요."
-                    )
+                    st.session_state["collect_result"] = {"error": str(e)}
+
+            _render_collect_result()
 
     # ---- 일괄 생성 ----
     with col2:
@@ -354,11 +361,18 @@ def render_auto() -> None:
             todo = [p for p in products if status_map.get(p.code, "none") == "none"]
 
             st.write(f"현재 **미작업 {len(todo)}개** 대기 중")
+            st.caption("A에서 수집한 개수만큼 자동으로 맞춰집니다. 필요하면 직접 조절하세요.")
+
+            # 생성 편수 기본값/클램프 (todo 변화로 max를 넘으면 에러나므로 보정)
+            maxn = max(1, len(todo))
+            if "gen_n" not in st.session_state:
+                st.session_state["gen_n"] = 1
+            if st.session_state["gen_n"] > maxn:
+                st.session_state["gen_n"] = maxn
+
             n = st.number_input(
-                "이번에 생성할 편수 (1회 N편)", min_value=1,
-                max_value=max(1, len(todo)),
-                value=min(3, len(todo)) if todo else 1, step=1,
-                disabled=not todo,
+                "이번에 생성할 편수 (1회 N편)", min_value=1, max_value=maxn,
+                step=1, key="gen_n", disabled=not todo,
             )
             est = int(n) * 200
             st.caption(f"⚠ 예상 과금 약 {est:,}원 (편당 약 200원 가정). 발행은 검토 후 수동입니다.")
@@ -374,18 +388,56 @@ def render_auto() -> None:
                             generate_for(p)
                             done += 1
                         except Exception as e:
-                            fail.append((p, str(e)))
+                            fail.append((p.label, str(e)))
                     s.update(label="일괄 생성 완료", state="complete")
-                st.success(f"{done}편 생성 완료. (output 폴더 저장 · 상태 🟡 초안)")
-                if fail:
-                    with st.expander(f"⚠ 실패 {len(fail)}건"):
-                        for p, why in fail:
-                            st.write(f"- {p.label}: {why}")
+                st.session_state["batch_result"] = {"done": done, "fail": fail}
+
+            _render_batch_result()
 
         st.info(
             "생성된 초안은 [작업 현황] 탭에서 확인하고, [단건 작업] 탭에서 골라 검토·복사 후 "
             "네이버에 직접 발행하세요. 하루 1~2편 분산 발행을 권장합니다."
         )
+
+
+def _render_collect_result() -> None:
+    """수집 결과를 세션에서 읽어 표시(rerun 후에도 유지)."""
+    r = st.session_state.get("collect_result")
+    if not r:
+        return
+    if "error" in r:
+        st.error(
+            f"수집 중 오류: {r['error']}\n\n"
+            "쇼핑몰 접근이 막혔거나(봇 차단) 카테고리 번호가 틀렸을 수 있습니다. "
+            "잠시 후 다시 시도하거나 cate_no를 확인하세요."
+        )
+        return
+    st.success(
+        f"신규 {len(r['created'])}개 저장 · 건너뜀 {r['skipped']}개 · 실패 {len(r['failed'])}개"
+    )
+    if r["created"]:
+        st.write("**새로 받은 제품**")
+        for label in r["created"]:
+            st.write(f"- {label}")
+    if r["failed"]:
+        with st.expander(f"⚠ 실패 {len(r['failed'])}건"):
+            for name, why in r["failed"]:
+                st.write(f"- {name}: {why}")
+
+
+def _render_batch_result() -> None:
+    """일괄 생성 결과를 세션에서 읽어 표시(rerun 후에도 유지)."""
+    r = st.session_state.get("batch_result")
+    if not r:
+        return
+    if r["done"] == 0 and not r["fail"]:
+        st.info("생성된 편이 없습니다. (미작업이 없거나 편수가 0)")
+        return
+    st.success(f"{r['done']}편 생성 완료. (output 폴더 저장 · 상태 🟡 초안)")
+    if r["fail"]:
+        with st.expander(f"⚠ 실패 {len(r['fail'])}건"):
+            for label, why in r["fail"]:
+                st.write(f"- {label}: {why}")
 
 
 # ============================================================
