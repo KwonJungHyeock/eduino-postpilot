@@ -156,12 +156,19 @@ class _DetailImgParser(HTMLParser):
             self._depth -= 1
 
 
+def _clean_product_name(name: str) -> str:
+    """목록에서 따라온 라벨/잡텍스트 정리. (예: 앞에 붙는 '상품명 :' 제거)"""
+    name = re.sub(r"^\s*상품\s*명\s*[:：]?\s*", "", name)
+    return name.strip()
+
+
 def parse_product_list(html: str) -> list[CrawledProduct]:
     """목록 HTML → CrawledProduct 리스트(상품번호 기준 중복 제거, 등장순 유지)."""
     p = _ListParser()
     p.feed(html)
     by_no: dict[str, str] = {}
     for no, name in p.items:
+        name = _clean_product_name(name)
         # 같은 상품의 썸네일/제목 링크가 여러 번 나올 수 있음 → 이름 있는 쪽을 채택
         if no not in by_no or (not by_no[no] and name):
             by_no[no] = name
@@ -358,7 +365,8 @@ def collect_category(
         return result
 
     for i, prod in enumerate(fresh, start=1):
-        label = prod.name or f"상품 {prod.product_no}"
+        clean = _safe_name(_clean_product_name(prod.name))   # 라벨 정리 + 폴더명 안전화
+        label = clean or f"상품 {prod.product_no}"
         log(f"[{i}/{len(fresh)}] '{label}' 상세이미지 수집 중…")
         try:
             blobs = src.fetch_detail_images(prod)
@@ -369,13 +377,13 @@ def collect_category(
             result.failed.append((prod, "상세 이미지를 찾지 못함"))
             continue
 
-        folder = root / f"[{order}] {prod.code}_{_safe_name(prod.name)}"
+        folder = root / f"[{order}] {prod.code}_{clean}"
         folder.mkdir(parents=True, exist_ok=True)
         for n, (blob, ct) in enumerate(_with_types(blobs), start=1):
             (folder / f"detail_{n:02d}{_ext_for(blob, ct)}").write_bytes(blob)
 
         saved = image_loader.Product(
-            folder=folder, order=order, code=prod.code, name=_safe_name(prod.name),
+            folder=folder, order=order, code=prod.code, name=clean,
             image_path=image_loader.find_image(folder),
         )
         result.created.append(saved)
@@ -441,6 +449,8 @@ def _selftest() -> None:
     urls2 = parse_detail_image_urls(nodetail, "https://eduino.cafe24.com")
     assert urls2 == ["https://x/web/upload/big/aa.jpg"], urls2
 
+    assert _clean_product_name("상품명 : 아두이노 우노") == "아두이노 우노"
+    assert _clean_product_name("상품명아두이노 우노") == "아두이노 우노"
     assert _safe_name("센서/모듈_키트 A:B") == "센서 모듈 키트 A B", _safe_name("센서/모듈_키트 A:B")
     assert _ext_for(b"\x89PNG\r\n", "") == ".png"
     assert _ext_for(b"\xff\xd8\xff", "image/jpeg") == ".jpg"

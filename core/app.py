@@ -157,6 +157,20 @@ def build_links_template() -> str:
     return "\n".join(lines)
 
 
+def _output_filename(code: str, name: str) -> str:
+    """출력 파일명을 '제품코드_상품명_타임스탬프.md' 양식으로 통일.
+
+    예) A-1_아두이노 UNO R3 SMD 호환보드_20260601_1530.md
+    경로 금지문자만 제거하고 한글·공백은 유지(가독성), 길이는 제한.
+    """
+    base = f"{code}_{name}".strip()
+    base = re.sub(r'[\\/:*?"<>|\n\r\t]+', " ", base)   # 윈도우 파일명 금지문자
+    base = re.sub(r"\s+", " ", base).strip()
+    base = base[:80].rstrip(" _-")                      # 너무 긴 이름 제한
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    return f"{base}_{ts}.md"
+
+
 def generate_for(product) -> tuple[str, str]:
     """제품 폴더의 이미지 전부 → 추출 → 블로그 생성 → output 저장 → 상태=draft.
 
@@ -168,24 +182,38 @@ def generate_for(product) -> tuple[str, str]:
     extract_md = vision.extract_from_paths(imgs)
     blog = generator.generate_blog(extract_md, product.name, product.code)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    safe = re.sub(r"[^\w가-힣A-Za-z0-9-]", "_", product.code)
-    out_file = config.OUTPUT_DIR / f"{safe}_{ts}.md"
+    out_file = config.OUTPUT_DIR / _output_filename(product.code, product.name)
     out_file.write_text(blog, encoding="utf-8")
     state.set_status(product.code, product.name, "draft")
     return blog, str(out_file)
 
 
 # ============================================================
+# 공유 스냅샷 — 제품 스캔/상태/이미지수를 한 번만 계산해 세 탭이 공유
+#   (Streamlit은 매 rerun마다 탭 3개 본문을 모두 실행하므로, 따로 스캔하면
+#    파일시스템 조회가 3중복으로 일어남. 한 번만 모아 전달해 속도 확보.)
+# ============================================================
+def build_snapshot() -> dict:
+    products = image_loader.scan_products()
+    codes = [p.code for p in products]
+    return {
+        "products": products,
+        "status": state.get_status_map(codes),
+        "updated": state.get_updated_map(codes),
+        "img_count": {p.code: len(image_loader.find_images(p.folder)) for p in products},
+    }
+
+
+# ============================================================
 # 탭 ① 단건 작업
 # ============================================================
-def render_manual() -> None:
+def render_manual(snap: dict) -> None:
     left, right = st.columns([1, 1.4], gap="large")
 
     with left:
         with st.container(border=True):
             st.markdown('<span class="step-badge">① 제품 선택</span>', unsafe_allow_html=True)
-            products = image_loader.scan_products()
+            products = snap["products"]
             if not products:
                 st.warning(
                     f"제품 폴더가 없습니다.\n\n`{config.PRODUCTS_ROOT}` 안에 "
@@ -194,7 +222,7 @@ def render_manual() -> None:
                 )
                 return
 
-            status_map = state.get_status_map([p.code for p in products])
+            status_map = snap["status"]
 
             def fmt(i: int) -> str:
                 p = products[i]
@@ -232,6 +260,7 @@ def render_manual() -> None:
                     st.session_state["blog"] = blog
                     st.session_state["blog_for"] = product.code
                     st.session_state["saved_path"] = saved
+                    st.rerun()   # 스냅샷 갱신(상태 🟡 즉시 반영). 결과는 세션에 보관됨
                 except Exception as e:
                     st.error(f"생성 중 오류가 발생했습니다: {e}")
 
@@ -307,7 +336,7 @@ def _render_result(blog: str, product) -> None:
 # ============================================================
 # 탭 ② 자동 수집 · 일괄 생성
 # ============================================================
-def render_auto() -> None:
+def render_auto(snap: dict) -> None:
     col1, col2 = st.columns(2, gap="large")
 
     # ---- 수집 ----
@@ -350,6 +379,7 @@ def render_auto() -> None:
                     # 방금 수집한 개수에 '생성 편수'를 맞춰 둠(수집=1이면 생성도 1로 제안)
                     if res.created:
                         st.session_state["gen_n"] = len(res.created)
+                    st.rerun()   # 새 폴더 반영해 스냅샷 갱신(결과는 세션에 보관됨)
                 except Exception as e:
                     st.session_state["collect_result"] = {"error": str(e)}
 
@@ -360,9 +390,9 @@ def render_auto() -> None:
         with st.container(border=True):
             st.markdown('<span class="step-badge">B. 미작업 N편 일괄 생성</span>', unsafe_allow_html=True)
 
-            products = image_loader.scan_products()
-            status_map = state.get_status_map([p.code for p in products])
-            img_count = {p.code: len(image_loader.find_images(p.folder)) for p in products}
+            products = snap["products"]
+            status_map = snap["status"]
+            img_count = snap["img_count"]
 
             todo_all = [p for p in products if status_map.get(p.code, "none") == "none"]
             gen_pool = [p for p in todo_all if img_count[p.code] > 0]   # 생성 가능(이미지 있음)
@@ -418,6 +448,7 @@ def render_auto() -> None:
                             fail.append((p.label, str(e)))
                     s.update(label="일괄 생성 완료", state="complete")
                 st.session_state["batch_result"] = {"done": done, "fail": fail}
+                st.rerun()   # 상태 갱신(미작업→초안). 결과는 세션에 보관됨
 
             _render_batch_result()
 
@@ -470,17 +501,18 @@ def _render_batch_result() -> None:
 # ============================================================
 # 탭 ③ 작업 현황 (대시보드)
 # ============================================================
-def render_worklist() -> None:
+def render_worklist(snap: dict) -> None:
     with st.container(border=True):
         st.markdown('<span class="step-badge">📋 작업 현황</span>', unsafe_allow_html=True)
-        products = image_loader.scan_products()
+        products = snap["products"]
         if not products:
             st.info("아직 제품이 없습니다. [자동 수집·일괄] 탭에서 수집하거나 폴더를 추가하세요.")
             return
 
         codes = [p.code for p in products]
-        status_map = state.get_status_map(codes)
-        updated_map = state.get_updated_map(codes)
+        status_map = snap["status"]
+        updated_map = snap["updated"]
+        img_count = snap["img_count"]
 
         n_none = sum(1 for c in codes if status_map.get(c, "none") == "none")
         n_draft = sum(1 for c in codes if status_map.get(c) == "draft")
@@ -507,7 +539,7 @@ def render_worklist() -> None:
                 "코드": p.code,
                 "제품명": p.name,
                 "상태": state.STATUS_LABEL.get(sts, sts),
-                "이미지": len(image_loader.find_images(p.folder)),
+                "이미지": img_count.get(p.code, 0),
                 "갱신": updated_map.get(p.code, "-"),
             })
 
@@ -519,12 +551,14 @@ def render_worklist() -> None:
 
 
 # ============================================================
+snap = build_snapshot()   # 제품 스캔/상태/이미지수를 한 번만 계산해 세 탭이 공유
+
 tab_manual, tab_auto, tab_work = st.tabs(
     ["✍️ 단건 작업", "🛰️ 자동 수집·일괄", "📋 작업 현황"]
 )
 with tab_manual:
-    render_manual()
+    render_manual(snap)
 with tab_auto:
-    render_auto()
+    render_auto(snap)
 with tab_work:
-    render_worklist()
+    render_worklist(snap)
