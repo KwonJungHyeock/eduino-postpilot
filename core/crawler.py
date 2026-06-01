@@ -29,6 +29,7 @@ from __future__ import annotations
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -238,18 +239,19 @@ class Cafe24StorefrontSource(ProductSource):
             "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
         })
 
-    # --- 내부 HTTP 헬퍼 (요청 간 예의상 대기) ---
+    # --- 내부 HTTP 헬퍼 ---
     def _get_text(self, url: str) -> str:
+        # 목록/상세 HTML은 쇼핑몰 서버 → 짧은 예의 딜레이
         r = self.session.get(url, timeout=config.CRAWL_TIMEOUT)
         r.raise_for_status()
         r.encoding = r.apparent_encoding or r.encoding
-        time.sleep(config.CRAWL_DELAY_SEC)
+        time.sleep(config.CRAWL_HTML_DELAY)
         return r.text
 
     def _get_bytes(self, url: str) -> tuple[bytes, str]:
+        # 이미지는 CDN(cafe24img) → 딜레이 없이(병렬 다운로드에서 호출)
         r = self.session.get(url, timeout=config.CRAWL_TIMEOUT)
         r.raise_for_status()
-        time.sleep(config.CRAWL_DELAY_SEC)
         return r.content, r.headers.get("Content-Type", "")
 
     def _list_url(self, cate_no: str, page: int) -> str:
@@ -278,15 +280,21 @@ class Cafe24StorefrontSource(ProductSource):
     def fetch_detail_images(self, product: CrawledProduct) -> list[bytes]:
         html = self._get_text(self._detail_url(product.product_no))
         urls = parse_detail_image_urls(html, self.base)[: config.CRAWL_MAX_IMAGES]
-        blobs: list[bytes] = []
-        for u in urls:
+        if not urls:
+            return []
+
+        def fetch_one(u: str) -> bytes | None:
             try:
                 data, _ = self._get_bytes(u)
-                if data:
-                    blobs.append(data)
+                return data or None
             except requests.RequestException:
-                continue  # 이미지 한 장 실패는 건너뛰고 계속
-        return blobs
+                return None  # 이미지 한 장 실패는 건너뜀
+
+        # CDN에서 병렬 다운로드. ex.map은 입력 순서를 보존 → 세로 이어붙임 순서 유지
+        workers = max(1, min(config.CRAWL_IMG_WORKERS, len(urls)))
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(fetch_one, urls))
+        return [d for d in results if d]
 
 
 # ============================================================

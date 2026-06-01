@@ -10,6 +10,7 @@ Eduino_PostPilot - 메인 화면 (Streamlit)
 수집'과 '초안 생성'까지입니다. 실행은 루트의 run.bat 으로 합니다.
 """
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import streamlit as st
@@ -171,21 +172,30 @@ def _output_filename(code: str, name: str) -> str:
     return f"{base}_{ts}.md"
 
 
-def generate_for(product) -> tuple[str, str]:
-    """제품 폴더의 이미지 전부 → 추출 → 블로그 생성 → output 저장 → 상태=draft.
+def produce_blog(product) -> str:
+    """제품 폴더의 이미지 전부 → 추출 → 블로그 생성. (API 작업만; 저장 안 함)
 
-    반환: (블로그 본문, 저장 경로). 단건/일괄 양쪽에서 공통으로 사용.
+    스레드에서 병렬 실행 가능하도록 파일/DB 쓰기와 분리. st.* 호출 없음.
     """
     imgs = image_loader.find_images(product.folder)
     if not imgs:
         raise RuntimeError("이 제품 폴더에 통이미지가 없습니다.")
     extract_md = vision.extract_from_paths(imgs)
-    blog = generator.generate_blog(extract_md, product.name, product.code)
+    return generator.generate_blog(extract_md, product.name, product.code)
 
+
+def save_blog(product, blog: str) -> str:
+    """블로그를 output에 저장하고 상태를 draft로. (메인 스레드에서 호출)"""
     out_file = config.OUTPUT_DIR / _output_filename(product.code, product.name)
     out_file.write_text(blog, encoding="utf-8")
     state.set_status(product.code, product.name, "draft")
-    return blog, str(out_file)
+    return str(out_file)
+
+
+def generate_for(product) -> tuple[str, str]:
+    """단건: 추출 → 생성 → 저장 → 상태=draft. 반환 (블로그, 저장 경로)."""
+    blog = produce_blog(product)
+    return blog, save_blog(product, blog)
 
 
 # ============================================================
@@ -434,18 +444,26 @@ def render_auto(snap: dict) -> None:
             est = int(n) * 200
             st.caption(f"⚠ 예상 과금 약 {est:,}원 (편당 약 200원 가정). 발행은 검토 후 수동입니다.")
 
+            st.caption(f"동시 처리 {config.GEN_WORKERS}개로 병렬 생성합니다.")
             if st.button("✨ 미작업 N편 생성", type="primary",
                          disabled=not target_pool, use_container_width=True):
                 targets = target_pool[: int(n)]
                 done, fail = 0, []
-                with st.status("일괄 생성 시작…", expanded=True) as s:
-                    for i, p in enumerate(targets, start=1):
-                        s.update(label=f"[{i}/{len(targets)}] '{p.name}' 생성 중…")
-                        try:
-                            generate_for(p)
-                            done += 1
-                        except Exception as e:
-                            fail.append((p.label, str(e)))
+                total = len(targets)
+                workers = max(1, min(config.GEN_WORKERS, total))
+                with st.status(f"일괄 생성 시작… (동시 {workers}개)", expanded=True) as s:
+                    # API 작업(추출+생성)은 스레드 병렬, 저장/상태는 메인 스레드에서
+                    with ThreadPoolExecutor(max_workers=workers) as ex:
+                        futures = {ex.submit(produce_blog, p): p for p in targets}
+                        for fut in as_completed(futures):
+                            p = futures[fut]
+                            try:
+                                blog = fut.result()
+                                save_blog(p, blog)
+                                done += 1
+                            except Exception as e:
+                                fail.append((p.label, str(e)))
+                            s.update(label=f"[{done + len(fail)}/{total}] 완료 — '{p.name}'")
                     s.update(label="일괄 생성 완료", state="complete")
                 st.session_state["batch_result"] = {"done": done, "fail": fail}
                 st.rerun()   # 상태 갱신(미작업→초안). 결과는 세션에 보관됨

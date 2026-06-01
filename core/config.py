@@ -35,6 +35,9 @@ MAX_OUTPUT_TOKENS = 4000
 OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "low")
 OPENAI_IMAGE_DETAIL = os.getenv("OPENAI_IMAGE_DETAIL", "high")
 GEN_MAX_TOKENS = int(os.getenv("GEN_MAX_TOKENS", "6000"))
+# 일괄 생성 동시 처리 수(스레드). API 호출은 I/O 대기라 병렬로 벽시계 시간 단축.
+# 너무 높이면 OpenAI 레이트리밋/순간비용↑. 기본 3.
+GEN_WORKERS = int(os.getenv("GEN_WORKERS", "3"))
 
 # ------------------------------------------------------------
 # 쇼핑몰 (블로그 CTA)
@@ -70,7 +73,9 @@ IMAGE_SLICE_OVERLAP = 100
 #   - 쇼핑몰이 Cafe24 기반이라 표준 URL로 상품목록/상세를 수집합니다.
 #   - 지금은 스토어프론트 HTML 스크래핑. 추후 Cafe24 OpenAPI 소스로 교체 가능
 #     (crawler.py 의 ProductSource 인터페이스만 갈아끼우면 됨).
-#   - ⚠ 자사 쇼핑몰만 대상으로, 요청 간격(CRAWL_DELAY_SEC)을 두어 부하를 주지 않습니다.
+#   - ⚠ 자사 쇼핑몰만 대상으로, HTML 요청에는 짧은 간격(CRAWL_HTML_DELAY)을 둡니다.
+#   - 균형 모드: 쇼핑몰 서버(목록/상세 HTML)에는 0.5초 예의 딜레이, 이미지는 CDN
+#     (cafe24img)에서 받으므로 딜레이 없이 병렬 다운로드해 속도를 확보합니다.
 # ------------------------------------------------------------
 SHOP_BASE = os.getenv("SHOP_BASE", "https://eduino.cafe24.com").rstrip("/")
 CRAWL_USER_AGENT = os.getenv(
@@ -78,10 +83,13 @@ CRAWL_USER_AGENT = os.getenv(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 )
-CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "2.0"))   # 요청 사이 대기(초)
+CRAWL_HTML_DELAY = float(os.getenv("CRAWL_HTML_DELAY", "0.5"))  # 목록/상세 HTML 요청 사이 대기(초)
+CRAWL_IMG_WORKERS = int(os.getenv("CRAWL_IMG_WORKERS", "8"))    # 상세이미지 병렬 다운로드 수
 CRAWL_TIMEOUT = int(os.getenv("CRAWL_TIMEOUT", "20"))          # HTTP 타임아웃(초)
 CRAWL_MAX_PAGES = int(os.getenv("CRAWL_MAX_PAGES", "20"))      # 목록 페이지 탐색 상한
 CRAWL_MAX_IMAGES = int(os.getenv("CRAWL_MAX_IMAGES", "25"))    # 상세이미지 다운로드 상한/제품
+# (구) CRAWL_DELAY_SEC — 하위호환. HTML 딜레이는 이제 CRAWL_HTML_DELAY 사용
+CRAWL_DELAY_SEC = float(os.getenv("CRAWL_DELAY_SEC", "0.5"))
 
 # 카테고리 프리셋(선택): "표시이름": cate_no.  비워두면 화면에서 번호 직접 입력.
 CRAWL_CATEGORIES: dict[str, int] = {}
