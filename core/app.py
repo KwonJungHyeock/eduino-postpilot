@@ -1,10 +1,14 @@
 """
 Eduino_PostPilot - 메인 화면 (Streamlit)
 ------------------------------------------------------------
-탭 구성
-  🛰️ 수집     : 쇼핑몰 카테고리에서 제품을 받아오기만(폴더 채움)
-  ✍️ 생성     : 목록에서 여러 제품을 골라 한 번에 생성 → 검토·복사·발행
-  📋 작업 현황 : 작업됨/미작업 한눈에 보고 다음 할 일 구분
+한 화면 구성 (위 → 아래가 그대로 작업 순서)
+  ① 현황 요약   : 자사 미작업/초안/발행 + 입점사 수를 한눈에
+  ② 수집(접이식): 쇼핑몰 카테고리에서 제품 받아오기(폴더 채움)
+  ③ 생성·검토   : 목록(자사만·미작업만 기본)에서 체크 → 한 번에 생성 → 검토·복사·발행
+  ④ 작업 현황(접이식): 전체 진행 표
+
+자사 / 입점사: 제품코드 앞글자가 config.OWN_CODE_PREFIXES(기본 A~E)면 '자사제품'
+(블로그 작성 대상), 그 외는 '입점사 제품'으로 보고 기본 목록에서 숨깁니다.
 
 발행은 여전히 사람이 검토 후 수동으로 합니다(어뷰징 회피). 자동화는 '초안 재료
 수집'과 '초안 생성'까지입니다. 실행은 루트의 run.bat 으로 합니다.
@@ -206,9 +210,9 @@ def load_draft(product) -> tuple[str | None, str | None]:
 
 
 # ============================================================
-# 공유 스냅샷 — 제품 스캔/상태/이미지수를 한 번만 계산해 세 탭이 공유
-#   (Streamlit은 매 rerun마다 탭 3개 본문을 모두 실행하므로, 따로 스캔하면
-#    파일시스템 조회가 3중복으로 일어남. 한 번만 모아 전달해 속도 확보.)
+# 공유 스냅샷 — 제품 스캔/상태/이미지수를 한 번만 계산해 화면 전체가 공유
+#   (한 페이지 안에서 요약/생성/현황이 같은 데이터를 보므로, 각자 스캔하면
+#    파일시스템 조회가 중복됨. 한 번만 모아 전달해 속도 확보.)
 # ============================================================
 def product_key(p) -> str:
     """작업 상태 식별 키. 코드는 (수동/크롤링 간) 겹칠 수 있으므로 '폴더명'으로 고유 식별."""
@@ -227,13 +231,13 @@ def build_snapshot() -> dict:
 
 
 # ============================================================
-# 탭 ✍️ 생성 — 목록에서 선택해 생성 + 검토·복사·발행
+# 생성·검토 — 목록에서 선택해 생성 + 검토·복사·발행
 # ============================================================
 def render_generate(snap: dict) -> None:
     products = snap["products"]
     if not products:
         st.info(
-            f"아직 제품이 없습니다. [🛰️ 수집] 탭에서 쇼핑몰에서 받아오거나, "
+            f"아직 제품이 없습니다. 위 [🛰️ 쇼핑몰에서 제품 수집]을 열어 받아오거나, "
             f"`{config.PRODUCTS_ROOT}` 에 '[순번] 코드_제품명' 폴더를 직접 넣으세요."
         )
         return
@@ -244,15 +248,21 @@ def render_generate(snap: dict) -> None:
     # ---- ① 목록에서 선택 → 생성 (전체 폭: 제품명이 길어 좌우 분할 시 잘림) ----
     with st.container(border=True):
         st.markdown('<span class="step-badge">① 생성할 제품 선택</span>', unsafe_allow_html=True)
-        only_todo = st.checkbox("미작업만 보기", value=True)
+        f1, f2 = st.columns(2)
+        own_only = f1.checkbox("자사제품만 보기", value=True,
+                               help=f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사. "
+                                    "입점사 제품은 블로그 작성 대상이 아닙니다.")
+        only_todo = f2.checkbox("미작업만 보기", value=True)
         view = [p for p in products
-                if not only_todo or status_map.get(product_key(p), "none") == "none"]
+                if (not own_only or config.is_own_code(p.code))
+                and (not only_todo or status_map.get(product_key(p), "none") == "none")]
 
         if not view:
-            st.success("미작업 제품이 없습니다. 모두 생성됐어요! (전체 보기를 끄면 다시 보입니다)")
+            st.success("조건에 맞는 제품이 없습니다. (위 필터를 꺼서 더 볼 수 있어요)")
         else:
             rows = [{
                 "선택": False,
+                "구분": "자사" if config.is_own_code(p.code) else "입점사",
                 "순번": p.order,
                 "코드": p.code,
                 "제품명": p.name,
@@ -264,13 +274,14 @@ def render_generate(snap: dict) -> None:
                 height=min(560, 80 + 35 * len(rows)),   # 행 수에 맞춰 높이 확보(스크롤 최소화)
                 column_config={
                     "선택": st.column_config.CheckboxColumn(required=False, width="small"),
+                    "구분": st.column_config.TextColumn(width="small", help="자사 = 블로그 작성 대상"),
                     "순번": st.column_config.NumberColumn(width="small"),
                     "코드": st.column_config.TextColumn(width="small"),
                     "제품명": st.column_config.TextColumn(width="large"),   # 가장 넓게
                     "상태": st.column_config.TextColumn(width="medium"),
                     "이미지": st.column_config.NumberColumn("이미지", width="small", help="통이미지 장수"),
                 },
-                disabled=["순번", "코드", "제품명", "상태", "이미지"],
+                disabled=["구분", "순번", "코드", "제품명", "상태", "이미지"],
                 key="gen_select",
             )
             selected = [view[i] for i, r in enumerate(edited) if r["선택"]]
@@ -396,63 +407,75 @@ def _render_result(blog: str, product) -> None:
 
 
 # ============================================================
-# 탭 🛰️ 수집 — 쇼핑몰에서 받아오기만
+# 상단 현황 요약 — 한 화면에서 전체 진행을 한눈에
+# ============================================================
+def render_summary(snap: dict) -> None:
+    products = snap["products"]
+    status_map = snap["status"]
+    own = [p for p in products if config.is_own_code(p.code)]
+    ext = len(products) - len(own)
+
+    def cnt(sts: str) -> int:
+        return sum(1 for p in own if status_map.get(product_key(p), "none") == sts)
+
+    c = st.columns(4)
+    c[0].metric("⚪ 자사 미작업", cnt("none"))
+    c[1].metric("🟡 초안", cnt("draft"))
+    c[2].metric("🟢 발행", cnt("published"))
+    c[3].metric("🏷 입점사", ext, help="입점사 제품은 블로그 작성 대상이 아닙니다.")
+    st.caption(
+        f"자사제품 {len(own)}개 · 입점사 {ext}개  |  "
+        f"코드 앞글자가 **{'·'.join(config.OWN_CODE_PREFIXES)}** 이면 자사제품(블로그 작성 대상)입니다."
+    )
+
+
+# ============================================================
+# 수집 — 쇼핑몰에서 제품 받아오기 (한 화면 상단 expander 안에 배치)
 # ============================================================
 def render_collect(snap: dict) -> None:
-    left, right = st.columns([1, 1], gap="large")
+    st.caption(
+        f"대상 쇼핑몰: {config.SHOP_BASE} — 수집은 제품 폴더(상세이미지)만 채웁니다. "
+        "블로그 작성은 아래 [생성]에서 합니다."
+    )
+    c1, c2, c3 = st.columns([2, 1, 1])
+    with c1:
+        if config.CRAWL_CATEGORIES:
+            name = st.selectbox("카테고리", list(config.CRAWL_CATEGORIES.keys()))
+            cate_no = str(config.CRAWL_CATEGORIES[name])
+            st.caption(f"카테고리 번호(cate_no): {cate_no}")
+        else:
+            cate_no = str(st.number_input(
+                "카테고리 번호 (cate_no)", min_value=1, value=247, step=1,
+                help="쇼핑몰 카테고리 페이지 주소의 cate_no= 뒤 숫자",
+            ))
+    with c2:
+        count = st.number_input("수집할 상품 수", min_value=1, max_value=100, value=5, step=1)
+    with c3:
+        st.write("")  # 버튼 세로 정렬용 여백
+        st.write("")
+        skip_existing = st.checkbox("기존 건너뛰기", value=True)
 
-    with left:
-        with st.container(border=True):
-            st.markdown('<span class="step-badge">쇼핑몰에서 자동 수집</span>', unsafe_allow_html=True)
-            st.caption(f"대상 쇼핑몰: {config.SHOP_BASE}")
+    if st.button("🛰️ 수집 시작", type="primary", use_container_width=True):
+        try:
+            with st.status("수집 준비 중…", expanded=True) as s:
+                res = crawler.collect_category(
+                    cate_no, int(count),
+                    skip_existing=skip_existing,
+                    on_progress=lambda m: s.update(label=m),
+                )
+                s.update(label="수집 완료", state="complete")
+            # 결과를 세션에 저장해 rerun(다른 위젯 조작) 후에도 화면에 유지
+            st.session_state["collect_result"] = {
+                "created": [p.label for p in res.created],
+                "skipped": len(res.skipped),
+                "failed": [(prod.name or prod.product_no, why)
+                           for prod, why in res.failed],
+            }
+            st.rerun()   # 새 폴더 반영해 스냅샷 갱신(결과는 세션에 보관됨)
+        except Exception as e:
+            st.session_state["collect_result"] = {"error": str(e)}
 
-            if config.CRAWL_CATEGORIES:
-                name = st.selectbox("카테고리", list(config.CRAWL_CATEGORIES.keys()))
-                cate_no = str(config.CRAWL_CATEGORIES[name])
-                st.caption(f"카테고리 번호(cate_no): {cate_no}")
-            else:
-                cate_no = str(st.number_input(
-                    "카테고리 번호 (cate_no)", min_value=1, value=247, step=1,
-                    help="쇼핑몰 카테고리 페이지 주소의 cate_no= 뒤 숫자",
-                ))
-
-            count = st.number_input("수집할 상품 수", min_value=1, max_value=100, value=5, step=1)
-            skip_existing = st.checkbox("이미 받은 상품은 건너뛰기", value=True)
-
-            if st.button("🛰️ 수집 시작", type="primary", use_container_width=True):
-                try:
-                    with st.status("수집 준비 중…", expanded=True) as s:
-                        res = crawler.collect_category(
-                            cate_no, int(count),
-                            skip_existing=skip_existing,
-                            on_progress=lambda m: s.update(label=m),
-                        )
-                        s.update(label="수집 완료", state="complete")
-                    # 결과를 세션에 저장해 rerun(다른 위젯 조작) 후에도 화면에 유지
-                    st.session_state["collect_result"] = {
-                        "created": [p.label for p in res.created],
-                        "skipped": len(res.skipped),
-                        "failed": [(prod.name or prod.product_no, why)
-                                   for prod, why in res.failed],
-                    }
-                    st.rerun()   # 새 폴더 반영해 스냅샷 갱신(결과는 세션에 보관됨)
-                except Exception as e:
-                    st.session_state["collect_result"] = {"error": str(e)}
-
-            _render_collect_result()
-
-    with right:
-        with st.container(border=True):
-            st.markdown('<span class="step-badge">수집 현황</span>', unsafe_allow_html=True)
-            products = snap["products"]
-            status_map = snap["status"]
-            todo = sum(1 for p in products if status_map.get(product_key(p), "none") == "none")
-            st.metric("수집된 제품(폴더)", len(products))
-            st.metric("그중 미작업", todo)
-            st.info(
-                "수집은 폴더만 채웁니다. 생성·검토·발행은 [✍️ 생성] 탭에서 하세요. "
-                "발행은 검토 후 수동, 하루 1~2편 분산을 권장합니다."
-            )
+    _render_collect_result()
 
 
 def _render_collect_result() -> None:
@@ -496,67 +519,63 @@ def _render_batch_result() -> None:
 
 
 # ============================================================
-# 탭 ③ 작업 현황 (대시보드)
+# 작업 현황 (접이식 대시보드)
 # ============================================================
 def render_worklist(snap: dict) -> None:
-    with st.container(border=True):
-        st.markdown('<span class="step-badge">📋 작업 현황</span>', unsafe_allow_html=True)
-        products = snap["products"]
-        if not products:
-            st.info("아직 제품이 없습니다. [🛰️ 수집] 탭에서 수집하거나 폴더를 추가하세요.")
-            return
+    products = snap["products"]
+    if not products:
+        st.info("아직 제품이 없습니다. 위 [🛰️ 쇼핑몰에서 제품 수집]에서 받아오거나 폴더를 추가하세요.")
+        return
 
-        status_map = snap["status"]
-        updated_map = snap["updated"]
-        img_count = snap["img_count"]
-        keys = [product_key(p) for p in products]
+    status_map = snap["status"]
+    updated_map = snap["updated"]
+    img_count = snap["img_count"]
 
-        n_none = sum(1 for k in keys if status_map.get(k, "none") == "none")
-        n_draft = sum(1 for k in keys if status_map.get(k) == "draft")
-        n_pub = sum(1 for k in keys if status_map.get(k) == "published")
+    own_only = st.checkbox("자사제품만", value=True, key="work_own_only")
+    flt = st.radio(
+        "보기", ["전체", "미작업", "초안", "발행"],
+        horizontal=True, label_visibility="collapsed",
+    )
+    wanted = {"미작업": "none", "초안": "draft", "발행": "published"}.get(flt)
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("⚪ 미작업", n_none)
-        m2.metric("🟡 초안", n_draft)
-        m3.metric("🟢 발행", n_pub)
+    rows = []
+    for p in products:
+        if own_only and not config.is_own_code(p.code):
+            continue
+        k = product_key(p)
+        sts = status_map.get(k, "none")
+        if wanted and sts != wanted:
+            continue
+        rows.append({
+            "구분": "자사" if config.is_own_code(p.code) else "입점사",
+            "순번": p.order,
+            "코드": p.code,
+            "제품명": p.name,
+            "상태": state.STATUS_LABEL.get(sts, sts),
+            "이미지": img_count.get(k, 0),
+            "갱신": updated_map.get(k, "-"),
+        })
 
-        flt = st.radio(
-            "보기", ["전체", "미작업", "초안", "발행"],
-            horizontal=True, label_visibility="collapsed",
-        )
-        wanted = {"미작업": "none", "초안": "draft", "발행": "published"}.get(flt)
-
-        rows = []
-        for p in products:
-            k = product_key(p)
-            sts = status_map.get(k, "none")
-            if wanted and sts != wanted:
-                continue
-            rows.append({
-                "순번": p.order,
-                "코드": p.code,
-                "제품명": p.name,
-                "상태": state.STATUS_LABEL.get(sts, sts),
-                "이미지": img_count.get(k, 0),
-                "갱신": updated_map.get(k, "-"),
-            })
-
-        if not rows:
-            st.caption("해당 조건의 제품이 없습니다.")
-        else:
-            st.dataframe(rows, use_container_width=True, hide_index=True)
-        st.caption("‘미작업’이 다음에 생성할 대상입니다. [✍️ 생성] 탭에서 골라 생성하세요.")
+    if not rows:
+        st.caption("해당 조건의 제품이 없습니다.")
+    else:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.caption("‘미작업’ 자사제품이 다음에 생성할 대상입니다. 위 [생성]에서 골라 만드세요.")
 
 
 # ============================================================
-snap = build_snapshot()   # 제품 스캔/상태/이미지수를 한 번만 계산해 세 탭이 공유
+# 한 화면 구성: 위에서 아래로 보면 그대로 작업 순서가 됩니다.
+#   ① 현황 요약  →  ② 수집(접이식)  →  ③ 생성·검토  →  ④ 작업 현황(접이식)
+# ============================================================
+snap = build_snapshot()   # 제품 스캔/상태/이미지수를 한 번만 계산해 화면 전체가 공유
 
-tab_collect, tab_gen, tab_work = st.tabs(
-    ["🛰️ 수집", "✍️ 생성", "📋 작업 현황"]
-)
-with tab_collect:
+render_summary(snap)
+
+with st.expander("🛰️ 쇼핑몰에서 제품 수집 (필요할 때만 펼치기)", expanded=not snap["products"]):
     render_collect(snap)
-with tab_gen:
-    render_generate(snap)
-with tab_work:
+
+st.markdown("#### ✍️ 블로그 생성 · 검토")
+render_generate(snap)
+
+with st.expander("📋 작업 현황 전체 보기", expanded=False):
     render_worklist(snap)

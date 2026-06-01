@@ -40,6 +40,25 @@ GEN_MAX_TOKENS = int(os.getenv("GEN_MAX_TOKENS", "6000"))
 GEN_WORKERS = int(os.getenv("GEN_WORKERS", "3"))
 
 # ------------------------------------------------------------
+# 자사 / 입점사 구분
+#   제품코드 맨 앞 글자가 아래 목록이면 '자사제품'(블로그 작성 대상),
+#   그 외(예: P-AY15)는 '입점사 제품'으로 보고 기본 목록에서 숨깁니다.
+#   .env 의 OWN_CODE_PREFIXES="A,B,C,D,E" 로 조정할 수 있습니다.
+# ------------------------------------------------------------
+OWN_CODE_PREFIXES = tuple(
+    p.strip().upper()
+    for p in os.getenv("OWN_CODE_PREFIXES", "A,B,C,D,E").split(",")
+    if p.strip()
+)
+
+
+def is_own_code(code: str | None) -> bool:
+    """제품코드가 자사제품(블로그 작성 대상)인지. 맨 앞 글자로 판별."""
+    if not code:
+        return False
+    return code.strip()[:1].upper() in OWN_CODE_PREFIXES
+
+# ------------------------------------------------------------
 # 쇼핑몰 (블로그 CTA)
 # ------------------------------------------------------------
 SHOP_NAME = os.getenv("SHOP_NAME", "에듀이노")
