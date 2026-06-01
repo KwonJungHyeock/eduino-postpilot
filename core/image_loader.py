@@ -19,7 +19,7 @@ import config
 # [순번] 코드_제품명  (코드는 첫 '_' 전까지, 그 뒤 전부가 제품명)
 _PATTERN = re.compile(r"^\[(\d+)\]\s*([^_]+)_(.+)$")
 
-IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 
 
 @dataclass

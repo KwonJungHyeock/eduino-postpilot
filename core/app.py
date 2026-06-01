@@ -31,7 +31,9 @@ st.markdown(
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
-    html, body, .stApp, [class*="st-"], button, input, textarea, select {
+    /* 본문 폰트는 상속으로 적용. [class*="st-"]로 전 요소를 직접 지정하면
+       머티리얼 아이콘 <span>까지 덮어써 아이콘이 'check' 글자로 깨지므로 제외 */
+    html, body, .stApp, button, input, textarea, select {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     .stApp {
@@ -343,6 +345,8 @@ def render_auto() -> None:
                         "failed": [(prod.name or prod.product_no, why)
                                    for prod, why in res.failed],
                     }
+                    # 방금 수집한 제품코드 기록 → '방금 수집분만 생성' 옵션에서 사용
+                    st.session_state["collect_codes"] = [p.code for p in res.created]
                     # 방금 수집한 개수에 '생성 편수'를 맞춰 둠(수집=1이면 생성도 1로 제안)
                     if res.created:
                         st.session_state["gen_n"] = len(res.created)
@@ -358,13 +362,36 @@ def render_auto() -> None:
 
             products = image_loader.scan_products()
             status_map = state.get_status_map([p.code for p in products])
-            todo = [p for p in products if status_map.get(p.code, "none") == "none"]
+            img_count = {p.code: len(image_loader.find_images(p.folder)) for p in products}
 
-            st.write(f"현재 **미작업 {len(todo)}개** 대기 중")
-            st.caption("A에서 수집한 개수만큼 자동으로 맞춰집니다. 필요하면 직접 조절하세요.")
+            todo_all = [p for p in products if status_map.get(p.code, "none") == "none"]
+            gen_pool = [p for p in todo_all if img_count[p.code] > 0]   # 생성 가능(이미지 있음)
+            no_img = [p for p in todo_all if img_count[p.code] == 0]    # 이미지 없는 폴더
 
-            # 생성 편수 기본값/클램프 (todo 변화로 max를 넘으면 에러나므로 보정)
-            maxn = max(1, len(todo))
+            # '방금 수집한 것만 생성' 옵션 — 순번 빠른 빈 폴더가 먼저 잡히는 문제 방지
+            collect_codes = [c for c in st.session_state.get("collect_codes", [])
+                             if status_map.get(c, "none") == "none" and img_count.get(c, 0) > 0]
+            only_new = False
+            if collect_codes:
+                only_new = st.checkbox(
+                    f"방금 수집한 {len(collect_codes)}개만 생성", value=True,
+                    help="끄면 미작업 전체를 순번 빠른 순서대로 생성합니다.",
+                )
+            target_pool = (
+                [p for p in gen_pool if p.code in collect_codes] if only_new else gen_pool
+            )
+
+            st.write(f"미작업 **{len(todo_all)}개** · 생성 가능 **{len(target_pool)}개**")
+            if no_img:
+                st.caption(
+                    f"⚠ 이미지 없는 미작업 {len(no_img)}개는 자동 생성에서 제외됩니다. "
+                    "(빈 폴더 — 통이미지를 넣거나 [작업 현황]에서 확인하세요)"
+                )
+            else:
+                st.caption("A에서 수집한 개수만큼 자동으로 맞춰집니다. 필요하면 직접 조절하세요.")
+
+            # 생성 편수 기본값/클램프 (target_pool 변화로 max를 넘으면 에러나므로 보정)
+            maxn = max(1, len(target_pool))
             if "gen_n" not in st.session_state:
                 st.session_state["gen_n"] = 1
             if st.session_state["gen_n"] > maxn:
@@ -372,14 +399,14 @@ def render_auto() -> None:
 
             n = st.number_input(
                 "이번에 생성할 편수 (1회 N편)", min_value=1, max_value=maxn,
-                step=1, key="gen_n", disabled=not todo,
+                step=1, key="gen_n", disabled=not target_pool,
             )
             est = int(n) * 200
             st.caption(f"⚠ 예상 과금 약 {est:,}원 (편당 약 200원 가정). 발행은 검토 후 수동입니다.")
 
             if st.button("✨ 미작업 N편 생성", type="primary",
-                         disabled=not todo, use_container_width=True):
-                targets = todo[: int(n)]
+                         disabled=not target_pool, use_container_width=True):
+                targets = target_pool[: int(n)]
                 done, fail = 0, []
                 with st.status("일괄 생성 시작…", expanded=True) as s:
                     for i, p in enumerate(targets, start=1):
@@ -430,12 +457,12 @@ def _render_batch_result() -> None:
     r = st.session_state.get("batch_result")
     if not r:
         return
-    if r["done"] == 0 and not r["fail"]:
+    if r["done"]:
+        st.success(f"{r['done']}편 생성 완료. (output 폴더 저장 · 상태 🟡 초안)")
+    elif not r["fail"]:
         st.info("생성된 편이 없습니다. (미작업이 없거나 편수가 0)")
-        return
-    st.success(f"{r['done']}편 생성 완료. (output 폴더 저장 · 상태 🟡 초안)")
     if r["fail"]:
-        with st.expander(f"⚠ 실패 {len(r['fail'])}건"):
+        with st.expander(f"⚠ 실패 {len(r['fail'])}건", expanded=r["done"] == 0):
             for label, why in r["fail"]:
                 st.write(f"- {label}: {why}")
 
