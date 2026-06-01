@@ -32,6 +32,10 @@ def _conn() -> sqlite3.Connection:
             collected_at TEXT DEFAULT (datetime('now','localtime'))
         )"""
     )
+    # 마이그레이션: 생성된 초안 파일 경로 컬럼(검토 패널에서 재로딩)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(product_state)").fetchall()}
+    if "output_path" not in cols:
+        conn.execute("ALTER TABLE product_state ADD COLUMN output_path TEXT")
     return conn
 
 
@@ -41,16 +45,18 @@ def get_status(code: str) -> str:
         return row[0] if row else "none"
 
 
-def set_status(code: str, name: str, status: str) -> None:
+def set_status(code: str, name: str, status: str, output_path: str | None = None) -> None:
+    """상태 저장. output_path를 주면 갱신, 없으면 기존 경로 유지(COALESCE)."""
     with closing(_conn()) as c:
         c.execute(
-            """INSERT INTO product_state (code, name, status, updated_at)
-               VALUES (?,?,?, datetime('now','localtime'))
+            """INSERT INTO product_state (code, name, status, output_path, updated_at)
+               VALUES (?,?,?,?, datetime('now','localtime'))
                ON CONFLICT(code) DO UPDATE SET
                  status=excluded.status,
                  name=excluded.name,
+                 output_path=COALESCE(excluded.output_path, product_state.output_path),
                  updated_at=excluded.updated_at""",
-            (code, name, status),
+            (code, name, status, output_path),
         )
         c.commit()
 
@@ -98,6 +104,15 @@ def collected_product_nos() -> set[str]:
     """이미 수집한 상품번호 집합."""
     with closing(_conn()) as c:
         return {row[0] for row in c.execute("SELECT product_no FROM collected").fetchall()}
+
+
+def get_output_path(code: str) -> str | None:
+    """저장된 초안 파일 경로(없으면 None)."""
+    with closing(_conn()) as c:
+        row = c.execute(
+            "SELECT output_path FROM product_state WHERE code=?", (code,)
+        ).fetchone()
+        return row[0] if row and row[0] else None
 
 
 STATUS_LABEL = {

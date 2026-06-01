@@ -2,9 +2,9 @@
 Eduino_PostPilot - 메인 화면 (Streamlit)
 ------------------------------------------------------------
 탭 구성
-  ① 단건 작업      : 제품 하나 골라 통이미지 확인 → 생성 → 복사 발행 (기존 흐름)
-  ② 자동 수집·일괄 : 쇼핑몰 카테고리에서 자동 수집 → 미작업 N편 일괄 생성
-  ③ 작업 현황      : 작업됨/미작업 한눈에 보고 다음 할 일 구분
+  🛰️ 수집     : 쇼핑몰 카테고리에서 제품을 받아오기만(폴더 채움)
+  ✍️ 생성     : 목록에서 여러 제품을 골라 한 번에 생성 → 검토·복사·발행
+  📋 작업 현황 : 작업됨/미작업 한눈에 보고 다음 할 일 구분
 
 발행은 여전히 사람이 검토 후 수동으로 합니다(어뷰징 회피). 자동화는 '초안 재료
 수집'과 '초안 생성'까지입니다. 실행은 루트의 run.bat 으로 합니다.
@@ -12,6 +12,7 @@ Eduino_PostPilot - 메인 화면 (Streamlit)
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
 
@@ -185,17 +186,23 @@ def produce_blog(product) -> str:
 
 
 def save_blog(product, blog: str) -> str:
-    """블로그를 output에 저장하고 상태를 draft로. (메인 스레드에서 호출)"""
+    """블로그를 output에 저장하고 상태를 draft + 파일경로 기록. (메인 스레드에서 호출)"""
     out_file = config.OUTPUT_DIR / _output_filename(product.code, product.name)
     out_file.write_text(blog, encoding="utf-8")
-    state.set_status(product_key(product), product.name, "draft")
+    key = product_key(product)
+    state.set_status(key, product.name, "draft", output_path=str(out_file))
+    st.session_state.setdefault("drafts", {})[key] = blog   # 이번 세션 검토용
     return str(out_file)
 
 
-def generate_for(product) -> tuple[str, str]:
-    """단건: 추출 → 생성 → 저장 → 상태=draft. 반환 (블로그, 저장 경로)."""
-    blog = produce_blog(product)
-    return blog, save_blog(product, blog)
+def load_draft(product) -> tuple[str | None, str | None]:
+    """검토용 초안 본문 로드. 이번 세션 생성분 우선, 없으면 저장된 파일에서 재로딩."""
+    key = product_key(product)
+    blog = st.session_state.get("drafts", {}).get(key)
+    path = state.get_output_path(key)
+    if blog is None and path and Path(path).exists():
+        blog = Path(path).read_text(encoding="utf-8")
+    return blog, path
 
 
 # ============================================================
@@ -220,74 +227,107 @@ def build_snapshot() -> dict:
 
 
 # ============================================================
-# 탭 ① 단건 작업
+# 탭 ✍️ 생성 — 목록에서 선택해 생성 + 검토·복사·발행
 # ============================================================
-def render_manual(snap: dict) -> None:
-    left, right = st.columns([1, 1.4], gap="large")
+def render_generate(snap: dict) -> None:
+    products = snap["products"]
+    if not products:
+        st.info(
+            f"아직 제품이 없습니다. [🛰️ 수집] 탭에서 쇼핑몰에서 받아오거나, "
+            f"`{config.PRODUCTS_ROOT}` 에 '[순번] 코드_제품명' 폴더를 직접 넣으세요."
+        )
+        return
 
+    status_map = snap["status"]
+    img_count = snap["img_count"]
+    left, right = st.columns([1, 1.25], gap="large")
+
+    # ---- 왼쪽: 목록에서 선택 → 생성 ----
     with left:
         with st.container(border=True):
-            st.markdown('<span class="step-badge">① 제품 선택</span>', unsafe_allow_html=True)
-            products = snap["products"]
-            if not products:
-                st.warning(
-                    f"제품 폴더가 없습니다.\n\n`{config.PRODUCTS_ROOT}` 안에 "
-                    "'[순번] 코드_제품명' 형식 폴더를 만들거나, [자동 수집·일괄] 탭에서 "
-                    "쇼핑몰에서 수집하세요."
-                )
-                return
+            st.markdown('<span class="step-badge">① 생성할 제품 선택</span>', unsafe_allow_html=True)
+            only_todo = st.checkbox("미작업만 보기", value=True)
+            view = [p for p in products
+                    if not only_todo or status_map.get(product_key(p), "none") == "none"]
 
-            status_map = snap["status"]
-
-            def fmt(i: int) -> str:
-                p = products[i]
-                return f"{state.STATUS_LABEL.get(status_map.get(product_key(p), 'none'), '')}  {p.label}"
-
-            idx = st.selectbox("제품 목록", range(len(products)), format_func=fmt)
-            product = products[idx]
-
-            st.write(f"**제품코드** : {product.code}")
-            st.write(f"**제품명** : {product.name}")
-            st.write(f"**상태** : {state.STATUS_LABEL.get(status_map.get(product_key(product), 'none'), '')}")
-
-            imgs = image_loader.find_images(product.folder)
-            if imgs:
-                st.caption(f"통이미지 {len(imgs)}장")
-                for ip in imgs:
-                    st.image(str(ip), use_container_width=True)
+            if not view:
+                st.success("미작업 제품이 없습니다. 모두 생성됐어요! (전체 보기를 끄면 다시 보입니다)")
             else:
-                st.error("이 폴더에 통이미지가 없습니다.")
+                rows = [{
+                    "선택": False,
+                    "순번": p.order,
+                    "코드": p.code,
+                    "제품명": p.name,
+                    "상태": state.STATUS_LABEL.get(status_map.get(product_key(p), "none"), ""),
+                    "이미지": img_count.get(product_key(p), 0),
+                } for p in view]
+                edited = st.data_editor(
+                    rows, hide_index=True, use_container_width=True,
+                    column_config={"선택": st.column_config.CheckboxColumn(required=False)},
+                    disabled=["순번", "코드", "제품명", "상태", "이미지"],
+                    key="gen_select",
+                )
+                selected = [view[i] for i, r in enumerate(edited) if r["선택"]]
+                gen_targets = [p for p in selected if img_count.get(product_key(p), 0) > 0]
+                no_img_sel = [p for p in selected if img_count.get(product_key(p), 0) == 0]
 
+                est = len(gen_targets) * 200
+                st.caption(
+                    f"선택 {len(selected)}개 · 생성 대상 {len(gen_targets)}개 · "
+                    f"예상 과금 약 {est:,}원 (편당 약 200원). 동시 {config.GEN_WORKERS}개 병렬."
+                )
+                if no_img_sel:
+                    st.caption(f"⚠ 이미지 없는 {len(no_img_sel)}개는 제외됩니다.")
+
+                if st.button(f"✨ 선택한 {len(gen_targets)}개 생성", type="primary",
+                             disabled=not gen_targets, use_container_width=True):
+                    _run_batch(gen_targets)
+                    st.rerun()   # 상태 갱신. 결과는 세션에 보관됨
+
+            _render_batch_result()
+
+    # ---- 오른쪽: 검토 · 복사 · 발행 ----
     with right:
         with st.container(border=True):
-            st.markdown('<span class="step-badge">② 블로그 생성</span>', unsafe_allow_html=True)
-            run = st.button(
-                "✨ 블로그 글 생성하기", type="primary",
-                disabled=not product.image_path, use_container_width=True,
-            )
-            st.caption("⚠ 누르면 OpenAI API 과금이 발생합니다 (1편 약 150~250원).")
-
-            if run:
-                try:
-                    with st.status("통이미지 분석 중...", expanded=False) as s:
-                        blog, saved = generate_for(product)
-                        s.update(label="완료!", state="complete")
-                    st.session_state["blog"] = blog
-                    st.session_state["blog_for"] = product.code
-                    st.session_state["saved_path"] = saved
-                    st.rerun()   # 스냅샷 갱신(상태 🟡 즉시 반영). 결과는 세션에 보관됨
-                except Exception as e:
-                    st.error(f"생성 중 오류가 발생했습니다: {e}")
-
-        with st.container(border=True):
-            st.markdown('<span class="step-badge">③ 복사해서 발행</span>', unsafe_allow_html=True)
-            blog = st.session_state.get("blog")
-            if not blog or st.session_state.get("blog_for") != product.code:
-                st.info("왼쪽에서 제품을 고르고 [블로그 글 생성하기]를 누르세요.")
+            st.markdown('<span class="step-badge">② 검토 · 복사 · 발행</span>', unsafe_allow_html=True)
+            reviewable = [p for p in products
+                          if status_map.get(product_key(p), "none") in ("draft", "published")]
+            if not reviewable:
+                st.info("생성된 초안이 없습니다. 왼쪽에서 제품을 골라 생성하세요.")
             else:
-                if st.session_state.get("saved_path"):
-                    st.caption(f"💾 저장됨: {st.session_state['saved_path']}")
-                _render_result(blog, product)
+                def rfmt(i: int) -> str:
+                    p = reviewable[i]
+                    return f"{state.STATUS_LABEL.get(status_map.get(product_key(p), 'none'), '')}  {p.label}"
+
+                ridx = st.selectbox("검토할 제품", range(len(reviewable)), format_func=rfmt)
+                product = reviewable[ridx]
+                blog, path = load_draft(product)
+                if not blog:
+                    st.warning("초안 파일을 찾을 수 없습니다. 다시 생성해 주세요.")
+                else:
+                    if path:
+                        st.caption(f"💾 저장됨: {path}")
+                    _render_result(blog, product)
+
+
+def _run_batch(targets: list) -> None:
+    """선택한 제품들을 병렬 생성(추출+작성)하고 메인 스레드에서 저장·상태기록."""
+    done, fail = 0, []
+    total = len(targets)
+    workers = max(1, min(config.GEN_WORKERS, total))
+    with st.status(f"생성 시작… (동시 {workers}개)", expanded=True) as s:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(produce_blog, p): p for p in targets}
+            for fut in as_completed(futures):
+                p = futures[fut]
+                try:
+                    save_blog(p, fut.result())
+                    done += 1
+                except Exception as e:
+                    fail.append((p.label, str(e)))
+                s.update(label=f"[{done + len(fail)}/{total}] 완료 — '{p.name}'")
+        s.update(label="생성 완료", state="complete")
+    st.session_state["batch_result"] = {"done": done, "fail": fail}
 
 
 def _render_result(blog: str, product) -> None:
@@ -349,15 +389,14 @@ def _render_result(blog: str, product) -> None:
 
 
 # ============================================================
-# 탭 ② 자동 수집 · 일괄 생성
+# 탭 🛰️ 수집 — 쇼핑몰에서 받아오기만
 # ============================================================
-def render_auto(snap: dict) -> None:
-    col1, col2 = st.columns(2, gap="large")
+def render_collect(snap: dict) -> None:
+    left, right = st.columns([1, 1], gap="large")
 
-    # ---- 수집 ----
-    with col1:
+    with left:
         with st.container(border=True):
-            st.markdown('<span class="step-badge">A. 쇼핑몰에서 자동 수집</span>', unsafe_allow_html=True)
+            st.markdown('<span class="step-badge">쇼핑몰에서 자동 수집</span>', unsafe_allow_html=True)
             st.caption(f"대상 쇼핑몰: {config.SHOP_BASE}")
 
             if config.CRAWL_CATEGORIES:
@@ -389,96 +428,24 @@ def render_auto(snap: dict) -> None:
                         "failed": [(prod.name or prod.product_no, why)
                                    for prod, why in res.failed],
                     }
-                    # 방금 수집한 제품(폴더 키) 기록 → '방금 수집분만 생성' 옵션에서 사용
-                    st.session_state["collect_keys"] = [product_key(p) for p in res.created]
-                    # 방금 수집한 개수에 '생성 편수'를 맞춰 둠(수집=1이면 생성도 1로 제안)
-                    if res.created:
-                        st.session_state["gen_n"] = len(res.created)
                     st.rerun()   # 새 폴더 반영해 스냅샷 갱신(결과는 세션에 보관됨)
                 except Exception as e:
                     st.session_state["collect_result"] = {"error": str(e)}
 
             _render_collect_result()
 
-    # ---- 일괄 생성 ----
-    with col2:
+    with right:
         with st.container(border=True):
-            st.markdown('<span class="step-badge">B. 미작업 N편 일괄 생성</span>', unsafe_allow_html=True)
-
+            st.markdown('<span class="step-badge">수집 현황</span>', unsafe_allow_html=True)
             products = snap["products"]
             status_map = snap["status"]
-            img_count = snap["img_count"]
-
-            todo_all = [p for p in products if status_map.get(product_key(p), "none") == "none"]
-            gen_pool = [p for p in todo_all if img_count[product_key(p)] > 0]   # 생성 가능(이미지 있음)
-            no_img = [p for p in todo_all if img_count[product_key(p)] == 0]    # 이미지 없는 폴더
-
-            # '방금 수집한 것만 생성' 옵션 — 순번 빠른 빈 폴더가 먼저 잡히는 문제 방지
-            collect_keys = [k for k in st.session_state.get("collect_keys", [])
-                            if status_map.get(k, "none") == "none" and img_count.get(k, 0) > 0]
-            only_new = False
-            if collect_keys:
-                only_new = st.checkbox(
-                    f"방금 수집한 {len(collect_keys)}개만 생성", value=True,
-                    help="끄면 미작업 전체를 순번 빠른 순서대로 생성합니다.",
-                )
-            target_pool = (
-                [p for p in gen_pool if product_key(p) in collect_keys] if only_new else gen_pool
+            todo = sum(1 for p in products if status_map.get(product_key(p), "none") == "none")
+            st.metric("수집된 제품(폴더)", len(products))
+            st.metric("그중 미작업", todo)
+            st.info(
+                "수집은 폴더만 채웁니다. 생성·검토·발행은 [✍️ 생성] 탭에서 하세요. "
+                "발행은 검토 후 수동, 하루 1~2편 분산을 권장합니다."
             )
-
-            st.write(f"미작업 **{len(todo_all)}개** · 생성 가능 **{len(target_pool)}개**")
-            if no_img:
-                st.caption(
-                    f"⚠ 이미지 없는 미작업 {len(no_img)}개는 자동 생성에서 제외됩니다. "
-                    "(빈 폴더 — 통이미지를 넣거나 [작업 현황]에서 확인하세요)"
-                )
-            else:
-                st.caption("A에서 수집한 개수만큼 자동으로 맞춰집니다. 필요하면 직접 조절하세요.")
-
-            # 생성 편수 기본값/클램프 (target_pool 변화로 max를 넘으면 에러나므로 보정)
-            maxn = max(1, len(target_pool))
-            if "gen_n" not in st.session_state:
-                st.session_state["gen_n"] = 1
-            if st.session_state["gen_n"] > maxn:
-                st.session_state["gen_n"] = maxn
-
-            n = st.number_input(
-                "이번에 생성할 편수 (1회 N편)", min_value=1, max_value=maxn,
-                step=1, key="gen_n", disabled=not target_pool,
-            )
-            est = int(n) * 200
-            st.caption(f"⚠ 예상 과금 약 {est:,}원 (편당 약 200원 가정). 발행은 검토 후 수동입니다.")
-
-            st.caption(f"동시 처리 {config.GEN_WORKERS}개로 병렬 생성합니다.")
-            if st.button("✨ 미작업 N편 생성", type="primary",
-                         disabled=not target_pool, use_container_width=True):
-                targets = target_pool[: int(n)]
-                done, fail = 0, []
-                total = len(targets)
-                workers = max(1, min(config.GEN_WORKERS, total))
-                with st.status(f"일괄 생성 시작… (동시 {workers}개)", expanded=True) as s:
-                    # API 작업(추출+생성)은 스레드 병렬, 저장/상태는 메인 스레드에서
-                    with ThreadPoolExecutor(max_workers=workers) as ex:
-                        futures = {ex.submit(produce_blog, p): p for p in targets}
-                        for fut in as_completed(futures):
-                            p = futures[fut]
-                            try:
-                                blog = fut.result()
-                                save_blog(p, blog)
-                                done += 1
-                            except Exception as e:
-                                fail.append((p.label, str(e)))
-                            s.update(label=f"[{done + len(fail)}/{total}] 완료 — '{p.name}'")
-                    s.update(label="일괄 생성 완료", state="complete")
-                st.session_state["batch_result"] = {"done": done, "fail": fail}
-                st.rerun()   # 상태 갱신(미작업→초안). 결과는 세션에 보관됨
-
-            _render_batch_result()
-
-        st.info(
-            "생성된 초안은 [작업 현황] 탭에서 확인하고, [단건 작업] 탭에서 골라 검토·복사 후 "
-            "네이버에 직접 발행하세요. 하루 1~2편 분산 발행을 권장합니다."
-        )
 
 
 def _render_collect_result() -> None:
@@ -529,7 +496,7 @@ def render_worklist(snap: dict) -> None:
         st.markdown('<span class="step-badge">📋 작업 현황</span>', unsafe_allow_html=True)
         products = snap["products"]
         if not products:
-            st.info("아직 제품이 없습니다. [자동 수집·일괄] 탭에서 수집하거나 폴더를 추가하세요.")
+            st.info("아직 제품이 없습니다. [🛰️ 수집] 탭에서 수집하거나 폴더를 추가하세요.")
             return
 
         status_map = snap["status"]
@@ -571,18 +538,18 @@ def render_worklist(snap: dict) -> None:
             st.caption("해당 조건의 제품이 없습니다.")
         else:
             st.dataframe(rows, use_container_width=True, hide_index=True)
-        st.caption("‘미작업’이 다음에 생성할 대상입니다. [자동 수집·일괄] 탭에서 일괄 생성하세요.")
+        st.caption("‘미작업’이 다음에 생성할 대상입니다. [✍️ 생성] 탭에서 골라 생성하세요.")
 
 
 # ============================================================
 snap = build_snapshot()   # 제품 스캔/상태/이미지수를 한 번만 계산해 세 탭이 공유
 
-tab_manual, tab_auto, tab_work = st.tabs(
-    ["✍️ 단건 작업", "🛰️ 자동 수집·일괄", "📋 작업 현황"]
+tab_collect, tab_gen, tab_work = st.tabs(
+    ["🛰️ 수집", "✍️ 생성", "📋 작업 현황"]
 )
-with tab_manual:
-    render_manual(snap)
-with tab_auto:
-    render_auto(snap)
+with tab_collect:
+    render_collect(snap)
+with tab_gen:
+    render_generate(snap)
 with tab_work:
     render_worklist(snap)
