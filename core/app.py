@@ -84,25 +84,40 @@ st.markdown(
         padding: 0 20px 18px;
     }
 
-    /* 구간 헤더 — 카드 위쪽에 전체 폭 색 띠를 둘러 영역을 또렷하게 구분 */
+    /* 구간 헤더 — 카드 위쪽에 전체 폭 색 띠 + 컬러 아이콘 배지로 대비 강화 */
     .sec {
-        display:flex; align-items:center; gap:10px;
-        margin: 0 -20px 16px; padding: 13px 20px;
-        background: linear-gradient(135deg, #ecfeff 0%, #f0f9ff 100%);
-        border-bottom: 1px solid #e0f2fe;
+        display:flex; align-items:center; gap:11px;
+        margin: 0 -20px 16px; padding: 14px 20px;
+        background:#f1f5f9; border-bottom: 2px solid #cbd5e1;
         border-radius: 18px 18px 0 0;
     }
-    .sec .ic { font-size: 18px; line-height: 1; }
-    .sec .t  { font-weight: 800; color:#0f172a; font-size: 1.04rem; letter-spacing:-.2px; }
-    .sec .d  { color:#64748b; font-size:.8rem; margin-left:auto; text-align:right; }
+    .sec .ic {
+        width:30px; height:30px; border-radius:9px; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center;
+        color:#fff; font-weight:800; font-size:15px;
+        background:var(--tone,#64748b); box-shadow:0 3px 7px rgba(0,0,0,.18);
+    }
+    .sec .t  { font-weight:800; color:#0f172a; font-size:1.06rem; letter-spacing:-.2px; }
+    .sec .d  { color:#475569; font-size:.8rem; margin-left:auto; text-align:right; }
 
-    /* 섹션 톤별 색 — 카드 좌측 컬러 보더 + 헤더 띠 색으로 구간을 색감 분리 */
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-summary){ border-left:5px solid #6366f1; }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){ border-left:5px solid #06b6d4; }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){ border-left:5px solid #8b5cf6; }
-    .sec-summary{ background:linear-gradient(135deg,#eef2ff,#f5f3ff); border-bottom-color:#e0e7ff; }
-    .sec-gen{ background:linear-gradient(135deg,#ecfeff,#f0f9ff); border-bottom-color:#e0f2fe; }
-    .sec-review{ background:linear-gradient(135deg,#f5f3ff,#faf5ff); border-bottom-color:#ede9fe; }
+    /* 섹션 톤별 색 — 좌측 굵은 컬러 보더 + 진한 헤더 틴트 (대비 ↑) */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-summary){ border-left:6px solid #6366f1; }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){ border-left:6px solid #0891b2; }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){ border-left:6px solid #7c3aed; }
+    .sec-summary{ --tone:#6366f1; background:#e0e7ff; border-bottom-color:#a5b4fc; }
+    .sec-gen{ --tone:#0891b2; background:#cffafe; border-bottom-color:#67e8f9; }
+    .sec-review{ --tone:#7c3aed; background:#f3e8ff; border-bottom-color:#d8b4fe; }
+
+    /* 검토 패널 내부 소영역 카드 — 흰 큰 카드 안에서 묶음을 가볍게 구분
+       (.sec 를 포함한 '큰 카드'는 제외해 헤더 카드 스타일이 깨지지 않게) */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.subcard):not(:has(.sec)){
+        box-shadow:none; border:1px solid #e8edf3; background:#fbfcff;
+        border-radius:12px; padding: 2px 15px 12px;
+    }
+    .blk { display:flex; align-items:center; gap:8px; margin:12px 0 8px;
+           font-weight:800; color:#0f172a; font-size:.94rem; }
+    .blk .dot { width:11px; height:11px; border-radius:3px; background:var(--bc,#94a3b8); flex-shrink:0; }
+    .blk small { font-weight:600; color:#94a3b8; font-size:.8rem; }
 
     /* 자동화 파이프라인 스테퍼 — 수집→생성→검토→발행 흐름을 한 줄에 시각화 */
     .pipe { display:flex; align-items:stretch; margin:4px 0 14px; }
@@ -178,6 +193,19 @@ def section_header(icon: str, title: str, desc: str = "", tone: str = "") -> Non
     st.markdown(
         f'<div class="{cls}"><span class="ic">{icon}</span>'
         f'<span class="t">{title}</span>{d}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def block_label(text: str, color: str = "#94a3b8", note: str = "") -> None:
+    """검토 패널 소카드용 라벨 — 색 점 + 제목으로 어떤 영역인지 즉시 인지.
+
+    호출한 컨테이너 안에 .subcard 마커를 심어 그 컨테이너를 '소카드'로 스타일링.
+    """
+    n = f' <small>{note}</small>' if note else ""
+    st.markdown(
+        f'<span class="subcard"></span>'
+        f'<div class="blk"><span class="dot" style="background:{color}"></span>{text}{n}</div>',
         unsafe_allow_html=True,
     )
 
@@ -305,7 +333,7 @@ def render_generate(snap: dict) -> None:
 
     # ---- ① 목록에서 선택 → 생성 (전체 폭: 제품명이 길어 좌우 분할 시 잘림) ----
     with st.container(border=True):
-        section_header("①", "생성할 제품 선택", "체크 → 선택한 만큼 한 번에 생성", tone="gen")
+        section_header("1", "생성할 제품 선택", "체크 → 선택한 만큼 한 번에 생성", tone="gen")
         f1, f2 = st.columns(2)
         own_only = f1.checkbox("자사제품만 보기", value=True,
                                help=f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사. "
@@ -365,7 +393,7 @@ def render_generate(snap: dict) -> None:
 
     # ---- ② 검토 · 복사 · 발행 ----
     with st.container(border=True):
-        section_header("②", "검토 · 복사 · 발행", "초안을 골라 네이버에 붙여넣고 발행", tone="review")
+        section_header("2", "검토 · 복사 · 발행", "초안을 골라 네이버에 붙여넣고 발행", tone="review")
         reviewable = [p for p in products
                       if status_map.get(product_key(p), "none") in ("draft", "published")]
         if not reviewable:
@@ -412,48 +440,53 @@ def _render_result(blog: str, product) -> None:
     body = sec["본문"]
     img_slots = re.findall(r"\[이미지\s*\d+[:：][^\]]*\]", body)
 
-    # 본문은 길고, 나머지(제목·메타·태그·링크)는 짧음 → 좌(메타) / 우(본문) 2단으로
-    # 가로 공간을 의미 있게 채워 '내용 적은데 길게 늘어지는' 느낌을 줄인다.
+    # 본문은 길고, 나머지(제목·메타·태그·링크)는 짧음 → 좌(메타) / 우(본문) 2단.
+    # 각 항목을 색 점 라벨이 달린 소카드로 묶어 '어떤 영역인지' 바로 인지되게 한다.
     left, right = st.columns([5, 6], gap="large")
 
     with left:
-        titles = parse_title_candidates(sec["제목 후보"])
-        st.markdown("**제목 후보** (클릭해 선택 → 복사)")
-        chosen = st.radio("제목 선택", titles, label_visibility="collapsed")
-        st.code(chosen, language=None)
-        st.markdown(f'<span class="count-box">제목 {char_count(chosen)}자</span>', unsafe_allow_html=True)
+        with st.container(border=True):
+            block_label("제목 후보", "#06b6d4", "클릭해 선택 → 복사")
+            titles = parse_title_candidates(sec["제목 후보"])
+            chosen = st.radio("제목 선택", titles, label_visibility="collapsed")
+            st.code(chosen, language=None)
+            st.markdown(f'<span class="count-box">제목 {char_count(chosen)}자</span>', unsafe_allow_html=True)
 
         if sec["메타 디스크립션"]:
-            st.markdown("**메타 디스크립션** (검색결과 요약)")
-            st.code(sec["메타 디스크립션"], language=None)
-            st.markdown(
-                f'<span class="count-box">메타 {char_count(sec["메타 디스크립션"])}자</span>',
-                unsafe_allow_html=True,
-            )
+            with st.container(border=True):
+                block_label("메타 디스크립션", "#3b82f6", "검색결과 요약")
+                st.code(sec["메타 디스크립션"], language=None)
+                st.markdown(
+                    f'<span class="count-box">메타 {char_count(sec["메타 디스크립션"])}자</span>',
+                    unsafe_allow_html=True,
+                )
 
         if sec["추천 태그"]:
-            st.markdown("**추천 태그** (📋 우측 복사)")
-            st.code(sec["추천 태그"], language=None)
+            with st.container(border=True):
+                block_label("추천 태그", "#14b8a6", "📋 복사")
+                st.code(sec["추천 태그"], language=None)
 
-        st.markdown("**관련 링크** (빈칸 직접 입력 후 본문 끝에 붙이기)")
-        st.text_area("관련 링크", build_links_template(), height=160, label_visibility="collapsed")
+        with st.container(border=True):
+            block_label("관련 링크", "#f59e0b", "빈칸 채워 본문 끝에 붙이기")
+            st.text_area("관련 링크", build_links_template(), height=160, label_visibility="collapsed")
 
         if sec["SEO 키워드"]:
             with st.expander("🔍 사용된 SEO 키워드"):
                 st.write(sec["SEO 키워드"])
 
     with right:
-        st.markdown("**본문** (📋 우측 복사)")
-        st.code(body or "(본문 없음)", language=None)
-        st.markdown(
-            f'<span class="count-box">본문 {char_count(body)}자(공백포함)</span>'
-            f'<span class="count-box">이미지 자리 {len(img_slots)}곳</span>',
-            unsafe_allow_html=True,
-        )
-        if img_slots:
-            with st.expander(f"🖼 이미지 자리 {len(img_slots)}곳 - 통이미지에서 캡처해 삽입", expanded=True):
-                for sslot in img_slots:
-                    st.write("- " + sslot)
+        with st.container(border=True):
+            block_label("본문", "#7c3aed", "📋 복사")
+            st.code(body or "(본문 없음)", language=None)
+            st.markdown(
+                f'<span class="count-box">본문 {char_count(body)}자(공백포함)</span>'
+                f'<span class="count-box">이미지 자리 {len(img_slots)}곳</span>',
+                unsafe_allow_html=True,
+            )
+            if img_slots:
+                with st.expander(f"🖼 이미지 자리 {len(img_slots)}곳 - 통이미지에서 캡처해 삽입", expanded=True):
+                    for sslot in img_slots:
+                        st.write("- " + sslot)
 
     # 발행 영역 — 구분선으로 분리
     st.divider()
