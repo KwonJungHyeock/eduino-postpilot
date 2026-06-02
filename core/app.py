@@ -151,14 +151,11 @@ st.markdown(
     }
     .stButton > button:active { transform: scale(.99); }
     .stCode { border-radius:10px; }
-    /* 코드블록 복사 버튼 항상 보이게(원래는 hover 시에만 흐릿하게 떠서 안 보였음) */
-    div[data-testid="stCode"] > button,
-    div[data-testid="stCode"] [data-testid="stCodeCopyButton"],
-    [data-testid="stCodeCopyButton"] {
-        opacity: 1 !important; visibility: visible !important;
-        background:#ecfeff !important; border:1px solid #a5f0f7 !important;
-        border-radius:8px !important;
-    }
+    /* 코드블록 복사 버튼 — 평소 은은하게 보이고(0.5), 올리면 또렷(1). 박스로 튀지 않게 */
+    div[data-testid="stCode"] button,
+    [data-testid="stCodeCopyButton"] { opacity:.5 !important; transition:opacity .12s; }
+    div[data-testid="stCode"]:hover button,
+    div[data-testid="stCode"]:hover [data-testid="stCodeCopyButton"] { opacity:1 !important; }
     label, .stMarkdown p { color:#334155; }
 
     /* 아이콘 폰트 복구 — 위의 전역 Pretendard 적용이 머티리얼 아이콘 폰트를
@@ -278,7 +275,7 @@ def render_body_card(body: str) -> None:
 
     html = f"""
     <div id="bw">
-      <button id="cpy" onclick="cp()">📋 복사</button>
+      <div id="bar"><button id="cpy" onclick="cp()">📋 본문 복사</button></div>
       <div id="bd">{inner}</div>
     </div>
     <script>
@@ -286,7 +283,7 @@ def render_body_card(body: str) -> None:
       const t = {copy_js};
       const done = () => {{ const b=document.getElementById('cpy');
         b.textContent='✓ 복사됨'; b.classList.add('ok');
-        setTimeout(()=>{{b.textContent='📋 복사'; b.classList.remove('ok');}},1500); }};
+        setTimeout(()=>{{b.textContent='📋 본문 복사'; b.classList.remove('ok');}},1500); }};
       if (navigator.clipboard && window.isSecureContext) {{
         navigator.clipboard.writeText(t).then(done).catch(()=>fallback(t,done));
       }} else {{ fallback(t,done); }}
@@ -301,12 +298,12 @@ def render_body_card(body: str) -> None:
     <style>
       * {{ font-family:'Pretendard',-apple-system,sans-serif; box-sizing:border-box; }}
       #bw {{ position:relative; }}
-      #cpy {{ position:absolute; top:0; right:0; z-index:5; cursor:pointer;
-              background:#7c3aed; color:#fff; border:none; border-radius:9px;
-              padding:7px 14px; font-weight:700; font-size:13px;
+      #bar {{ display:flex; justify-content:flex-end; margin-bottom:8px; }}
+      #cpy {{ cursor:pointer; background:#7c3aed; color:#fff; border:none; border-radius:9px;
+              padding:7px 15px; font-weight:700; font-size:13px;
               box-shadow:0 3px 8px rgba(124,58,237,.35); }}
       #cpy.ok {{ background:#16a34a; }}
-      #bd {{ max-height:560px; overflow:auto; padding:6px 14px 6px 2px; margin-top:40px;
+      #bd {{ max-height:540px; overflow:auto; padding:2px 14px 2px 2px;
              color:#1f2937; font-size:14px; line-height:1.85; }}
       #bd p {{ margin:0 0 11px; }}
       #bd p.hd {{ font-weight:800; color:#0f172a; margin:18px 0 9px; font-size:14.5px; }}
@@ -315,7 +312,7 @@ def render_body_card(body: str) -> None:
                      color:#475569; font-size:13px; font-family:ui-monospace,monospace; }}
     </style>
     """
-    components.html(html, height=640, scrolling=False)
+    components.html(html, height=620, scrolling=False)
 
 
 def char_count(text: str) -> int:
