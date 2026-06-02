@@ -50,35 +50,40 @@ st.markdown(
             radial-gradient(circle at 1px 1px, #e6ecf3 1px, transparent 0) 0 0 / 22px 22px,
             #fafbfc;
     }
-    .block-container { padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1240px; }
+    .block-container { padding-top: 3.2rem; padding-bottom: 3rem; max-width: 1240px; }
 
     .app-header {
-        display:flex; align-items:center; gap:16px;
-        padding: 4px 0 18px; margin-bottom: 14px;
-        border-bottom: 2px solid #e7edf3;
+        display:flex; align-items:center; gap:15px;
+        padding: 6px 0 16px; margin-bottom: 16px;
+        border-bottom: 2px solid #f0e3e2;
     }
     .brand-mark {
-        width:54px; height:54px; border-radius:15px;
-        background: linear-gradient(135deg, #06b6d4, #0e7490);
+        width:56px; height:56px; border-radius:16px;
+        background: linear-gradient(135deg, #f0584d, #c92a22);
         color:#fff; font-weight:800; font-size:30px;
         display:flex; align-items:center; justify-content:center;
-        box-shadow: 0 8px 20px rgba(8,145,178,.32);
+        box-shadow: 0 8px 20px rgba(201,42,34,.32);
         flex-shrink:0;
     }
-    .brand-title { font-size:30px; font-weight:800; color:#0f172a; letter-spacing:-.6px; line-height:1.1; }
-    .brand-accent { color:#0e7490; }
-    .brand-sub { font-size:13.5px; color:#64748b; margin-top:4px; }
+    .brand-title { font-size:29px; font-weight:800; color:#0f172a; letter-spacing:-.6px; line-height:1.12; }
+    .brand-accent { color:#e3392e; }
+    .brand-sub { font-size:13px; color:#94a3b8; margin-top:3px; font-weight:600; letter-spacing:.2px; }
 
     .step-badge {
-        display:inline-block; background: linear-gradient(135deg, #06b6d4, #0e7490);
+        display:inline-block; background: linear-gradient(135deg, #f0584d, #c92a22);
         color:#fff; border-radius:999px; padding:5px 16px;
         font-size:.82rem; font-weight:700; margin-bottom:14px;
-        box-shadow: 0 3px 10px rgba(8,145,178,.28); letter-spacing:.2px;
+        box-shadow: 0 3px 10px rgba(201,42,34,.28); letter-spacing:.2px;
     }
     .count-box {
-        background:#ecfeff; border:1px solid #cff7fb; border-radius:9px;
-        padding:5px 12px; font-size:.82rem; color:#0e7490;
+        background:#f1f5f9; border:1px solid #e2e8f0; border-radius:9px;
+        padding:5px 12px; font-size:.82rem; color:#475569;
         display:inline-block; margin:2px 6px 2px 0; font-weight:600;
+    }
+    /* 기본(primary) 버튼 — 브랜드 레드 그라데이션 */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #f0584d, #d12a20) !important;
+        box-shadow: 0 4px 12px rgba(201,42,34,.30) !important;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -103,11 +108,13 @@ st.markdown(
     .sec .t  { font-weight:800; color:#0f172a; font-size:1.06rem; letter-spacing:-.2px; }
     .sec .d  { color:#475569; font-size:.8rem; margin-left:auto; text-align:right; }
 
-    /* 섹션 톤별 색 — 좌측 굵은 컬러 보더 + 진한 헤더 틴트 (대비 ↑) */
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-summary){ border-left:6px solid #6366f1; }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){ border-left:6px solid #0891b2; }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){ border-left:6px solid #7c3aed; }
-    .sec-summary{ --tone:#6366f1; background:#e0e7ff; border-bottom-color:#a5b4fc; }
+    /* 섹션 톤별 색 — 좌측 굵은 컬러 보더 + 진한 헤더 틴트 + 카드 배경 옅은 틴트(영역 구분) */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){
+        border-left:6px solid #0891b2; background:#f4fdff;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){
+        border-left:6px solid #7c3aed; background:#fbf7ff;
+    }
     .sec-gen{ --tone:#0891b2; background:#cffafe; border-bottom-color:#67e8f9; }
     .sec-review{ --tone:#7c3aed; background:#f3e8ff; border-bottom-color:#d8b4fe; }
 
@@ -158,6 +165,54 @@ st.markdown(
     div[data-testid="stCode"]:hover [data-testid="stCodeCopyButton"] { opacity:1 !important; }
     label, .stMarkdown p { color:#334155; }
 
+    /* ── 가변(생성) 데이터 출력부 = 반투명 하이라이트 박스로 '적용된 값' 표시 ──
+       제목·메타·태그가 들어가는 st.code 를 형광펜처럼 반전 처리해 한눈에 인지 */
+    div[data-testid="stCode"] {
+        background: rgba(227,57,46,.055) !important;
+        border:1px solid rgba(227,57,46,.16) !important;
+        border-left:4px solid #e3392e !important;
+        border-radius:10px !important;
+    }
+    div[data-testid="stCode"] pre, div[data-testid="stCode"] code {
+        background: transparent !important; color:#1f2937 !important;
+    }
+    /* 선택된 제목(라디오) 도 반전 — 어떤 후보를 적용했는지 표시 */
+    div[role="radiogroup"] label { padding:3px 8px; border-radius:8px; transition:background .12s; }
+    div[role="radiogroup"] label:has(input:checked) {
+        background: rgba(227,57,46,.08); box-shadow: inset 3px 0 0 #e3392e;
+    }
+    /* 입력 위젯(텍스트영역 등) 도 옅은 반투명 — 채워넣는 영역임을 표시 */
+    .stTextArea textarea { background: rgba(245,158,11,.05) !important; }
+
+    /* 표(데이터프레임·에디터) — 찍어낸 기본 그리드 느낌 제거: 둥근 모서리 + 부드러운 테두리 */
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
+        border-radius:13px !important; overflow:hidden;
+        border:1px solid #e4e9f0 !important;
+        box-shadow:0 1px 2px rgba(15,23,42,.04), 0 6px 16px rgba(15,23,42,.05);
+    }
+
+    /* 작업 현황(상단) — 한 줄 컴팩트 카드로 영역 최소화 */
+    .wcard {
+        background:#fff; border:1px solid #ece3e2; border-left:5px solid #e3392e;
+        border-radius:15px; padding:13px 20px 15px; margin-bottom:16px;
+        box-shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 24px rgba(15,23,42,.05);
+    }
+    .whead { display:flex; align-items:center; gap:8px; margin-bottom:11px; }
+    .whead .wdot { width:9px; height:9px; border-radius:3px; background:#e3392e; }
+    .whead b { font-size:1.02rem; color:#0f172a; letter-spacing:-.2px; }
+    .whead .wmeta { margin-left:auto; font-size:.79rem; color:#94a3b8; font-weight:600; }
+    .wbar { display:flex; }
+    .wstat {
+        flex:1; display:flex; flex-direction:column; align-items:center;
+        padding:3px 0; border-left:1px solid #f0f3f7;
+    }
+    .wstat:first-child { border-left:none; }
+    .wstat .wn { font-size:1.55rem; font-weight:800; color:var(--c,#475569); line-height:1.05; }
+    .wstat .wl { font-size:.76rem; color:#64748b; font-weight:700; margin-top:3px; }
+    .wprog { height:7px; background:#f0f3f7; border-radius:99px; margin-top:13px; overflow:hidden; }
+    .wfill { height:100%; background:linear-gradient(90deg,#e3392e,#f7867d); border-radius:99px; }
+    .wprog-t { font-size:.76rem; color:#94a3b8; font-weight:600; margin-top:6px; }
+
     /* 아이콘 폰트 복구 — 위의 전역 Pretendard 적용이 머티리얼 아이콘 폰트를
        덮어써서 체크/화살표가 'check', 'keyboard_arrow_right' 글자로 깨지는 것 방지 */
     span[data-testid="stIconMaterial"],
@@ -179,8 +234,8 @@ st.markdown(
     <div class="app-header">
       <div class="brand-mark">E</div>
       <div>
-        <div class="brand-title">Eduino <span class="brand-accent">PostPilot</span></div>
-        <div class="brand-sub">상세페이지 통이미지를 네이버 블로그 초안으로 — 검토 후 직접 발행</div>
+        <div class="brand-title">Eduino <span class="brand-accent">AI</span></div>
+        <div class="brand-sub">AIoT 교육플랫폼</div>
       </div>
     </div>
     """,
@@ -623,31 +678,34 @@ def render_summary(snap: dict) -> None:
 
     collected = len(products)
     todo, draft, pub = cnt("none"), cnt("draft"), cnt("published")
+    total = len(own)
+    pct = (pub / total * 100) if total else 0
 
-    with st.container(border=True):
-        section_header(
-            "📊", "자동화 현황",
-            f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사 · 입점사 {ext}개",
-            tone="summary",
-        )
-        stages = [
-            ("#f59e0b", "🛰️ 수집", collected, "제품"),
-            ("#06b6d4", "✍️ 생성 대기", todo, "미작업"),
-            ("#8b5cf6", "📝 검토", draft, "초안"),
-            ("#22c55e", "✅ 발행", pub, "완료"),
-        ]
-        cells = "".join(
-            f'<div class="stage" style="--c:{c}">'
-            f'<div class="lbl">{lbl}</div>'
-            f'<div class="num">{n}<small> {unit}</small></div></div>'
-            for c, lbl, n, unit in stages
-        )
-        st.markdown(f'<div class="pipe">{cells}</div>', unsafe_allow_html=True)
-
-        total = len(own)
-        if total:
-            ratio = pub / total
-            st.progress(ratio, text=f"자사 {total}개 중 {pub}개 발행 완료 · {ratio*100:.0f}%")
+    stages = [
+        ("#f59e0b", "🛰️ 수집", collected),
+        ("#0891b2", "✍️ 생성대기", todo),
+        ("#7c3aed", "📝 검토", draft),
+        ("#22c55e", "✅ 발행", pub),
+    ]
+    cells = "".join(
+        f'<div class="wstat"><span class="wn" style="--c:{c}">{n}</span>'
+        f'<span class="wl">{lbl}</span></div>'
+        for c, lbl, n in stages
+    )
+    prog = (
+        f'<div class="wprog"><div class="wfill" style="width:{pct:.0f}%"></div></div>'
+        f'<div class="wprog-t">자사 {total}개 중 {pub}개 발행 완료 · {pct:.0f}%</div>'
+        if total else ""
+    )
+    st.markdown(
+        f'<div class="wcard">'
+        f'  <div class="whead"><span class="wdot"></span><b>작업 현황</b>'
+        f'    <span class="wmeta">자사 {total} · 입점사 {ext} · 코드 {"·".join(config.OWN_CODE_PREFIXES)}=자사</span></div>'
+        f'  <div class="wbar">{cells}</div>'
+        f'  {prog}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
