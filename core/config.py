@@ -5,6 +5,7 @@ Eduino_PostPilot - 중앙 설정
 경로는 모두 자동 계산되므로 사용자가 직접 만질 필요가 없습니다.
 """
 import os
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -27,10 +28,74 @@ PROMPTS_DIR = PROJECT_ROOT / "prompts"  # 프롬프트 템플릿
 PRODUCTS_ROOT = Path(os.getenv("PRODUCTS_ROOT") or (PROJECT_ROOT / "Product_eduino"))
 
 # ------------------------------------------------------------
-# OpenAI
+# 사용자별 설정 저장 (최초 1회 키 입력 → 이 PC에 저장 → 다음부터 자동)
+#   위치: 사용자 홈 폴더의 .eduino_postpilot/config.json
+#   (앱 폴더와 분리 → 프로그램을 옮기거나 업데이트해도 키가 유지됨)
 # ------------------------------------------------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+USER_CONFIG_DIR = Path.home() / ".eduino_postpilot"
+USER_CONFIG_FILE = USER_CONFIG_DIR / "config.json"
+
+
+def load_saved_config() -> dict:
+    """이 PC에 저장된 설정(키·모델)을 읽어옵니다. 없으면 빈 dict."""
+    try:
+        return json.loads(USER_CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+_saved = load_saved_config()
+
+# ------------------------------------------------------------
+# OpenAI
+#   키/모델 우선순위: 환경변수(.env) > 이 PC에 저장된 값 > 기본값
+# ------------------------------------------------------------
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or _saved.get("OPENAI_API_KEY") or None
+OPENAI_MODEL = os.getenv("OPENAI_MODEL") or _saved.get("OPENAI_MODEL") or "gpt-5.4"
+
+
+def save_api_key(key: str, model: str | None = None) -> None:
+    """입력받은 키(와 선택적 모델)를 이 PC에 저장하고, 실행 중인 값도 즉시 갱신.
+    클라이언트가 호출 시점에 config.OPENAI_API_KEY를 읽으므로 재시작 없이 바로 적용됩니다."""
+    global OPENAI_API_KEY, OPENAI_MODEL
+    key = (key or "").strip()
+    cfg = load_saved_config()
+    cfg["OPENAI_API_KEY"] = key
+    if model:
+        cfg["OPENAI_MODEL"] = model.strip()
+    USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    USER_CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        USER_CONFIG_FILE.chmod(0o600)   # 가능한 OS에서는 본인만 읽기
+    except Exception:
+        pass
+    OPENAI_API_KEY = key
+    os.environ["OPENAI_API_KEY"] = key
+    if model:
+        OPENAI_MODEL = model.strip()
+
+
+def clear_api_key() -> None:
+    """저장된 키를 삭제(초기화)합니다. 다음 실행 시 다시 입력 화면이 뜹니다."""
+    global OPENAI_API_KEY
+    cfg = load_saved_config()
+    cfg.pop("OPENAI_API_KEY", None)
+    try:
+        USER_CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    OPENAI_API_KEY = None
+    os.environ.pop("OPENAI_API_KEY", None)
+
+
+def has_api_key() -> bool:
+    return bool(OPENAI_API_KEY)
+
+
+def mask_key(key: str | None = None) -> str:
+    """화면 표시용 마스킹: sk-abcd…WXYZ 형태."""
+    k = key or OPENAI_API_KEY or ""
+    return f"{k[:7]}…{k[-4:]}" if len(k) > 12 else "****"
 MAX_OUTPUT_TOKENS = 4000
 OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "low")
 OPENAI_IMAGE_DETAIL = os.getenv("OPENAI_IMAGE_DETAIL", "high")

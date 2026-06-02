@@ -56,36 +56,27 @@ eduino-postpilot/
 
 ## 4. 최초 설치 (기기당 1회)
 
-요구사항: Windows 11, Python 3.11+
+요구사항: Windows 11, **Python 3.11+** (설치 시 "Add Python to PATH" 체크)
 
-```cmd
-:: 1) 가상환경 생성·활성화
-python -m venv .venv
-.venv\Scripts\activate
+가장 간단한 방법 — **`run.bat` 더블클릭**.
+최초 1회는 자동으로 가상환경을 만들고 패키지를 설치한 뒤 실행됩니다(1~3분).
+이후 실행은 곧바로 켜집니다. 별도 명령어 입력이 필요 없습니다.
 
-:: 2) 패키지 설치
-pip install -r requirements.txt
+### OpenAI API 키 (최초 1회 입력)
+- 처음 실행하면 화면에 **키 입력 창**이 뜹니다. 키를 붙여넣고 저장하면 끝입니다.
+- 키는 **이 PC에만 저장**(`C:\Users\본인\.eduino_postpilot\config.json`)되어
+  다음 실행부터 자동 적용됩니다. (다시 입력 불필요)
+- 키 변경/삭제는 앱 상단 **⚙️ 설정** 패널에서 가능합니다.
+- 키 발급: https://platform.openai.com/api-keys
+- (개발자/고급) `.env`의 `OPENAI_API_KEY`가 있으면 그 값을 우선 사용합니다.
 
-:: 3) .env 생성 후 키 입력
-copy .env.example .env
-notepad .env
-```
-
-.env 입력값:
+선택 환경값(`.env` 또는 기본값):
 
 | 키 | 설명 |
 |---|---|
-| OPENAI_API_KEY | OpenAI API 키 (앞에 sk- 한 번만) |
 | OPENAI_MODEL | 기본 gpt-5.4 |
 | SHOP_URL | (선택) 기본값 https://eduino.kr/index.html |
 | PRODUCTS_ROOT | (선택) 비우면 Product_eduino 자동 사용 |
-
-설치 점검:
-```cmd
-cd core
-python -c "import config; config.validate()"
-cd ..
-```
 
 ---
 
@@ -137,7 +128,7 @@ Product_eduino\[1] A-1_아두이노 UNO R3 SMD 호환보드\detail.png
 | 항목 | 내용 |
 |---|---|
 | 비용 | 1편 약 150~250원 (통이미지 길이·모델에 따라) |
-| API 키 | .env 에만 보관, git 제외. 노출 시 즉시 재발급 |
+| API 키 | 이 PC의 사용자 폴더(.eduino_postpilot)에만 보관, git 제외. 노출 시 즉시 재발급. 공용 키는 OpenAI 대시보드에서 월 사용량 한도 설정 권장 |
 | 결과 | output 폴더에 자동 저장 |
 
 ---

@@ -895,9 +895,91 @@ def _style_worklist(rows: list[dict]):
 
 
 # ============================================================
+# OpenAI 키 온보딩 — 최초 1회 입력 → 이 PC에 저장 → 다음부터 자동
+# ============================================================
+def _verify_key(key: str) -> tuple[bool, str]:
+    """키가 실제로 동작하는지 가벼운 호출(models.list, 과금 없음)로 확인."""
+    try:
+        from openai import OpenAI
+        OpenAI(api_key=key).models.list()
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+def render_onboarding() -> None:
+    """키가 없을 때 표시. 키를 한 번 입력·저장하면 다음 실행부터 이 화면은 생략됩니다."""
+    _, mid, _ = st.columns([1, 2.2, 1])
+    with mid:
+        with st.container(border=True):
+            section_header("🔑", "OpenAI API 키 입력", "최초 1회만 — 이 PC에 저장됩니다", tone="review")
+            st.markdown(
+                "이 프로그램은 OpenAI로 블로그 초안을 생성하므로 **API 키**가 필요합니다.\n\n"
+                "- 키는 **이 컴퓨터에만 저장**되며 외부로 전송·공유되지 않습니다.\n"
+                "- 한 번 저장하면 다음 실행부터 **자동 적용**(다시 입력 불필요).\n"
+                "- 키 발급: https://platform.openai.com/api-keys"
+            )
+            key = st.text_input(
+                "OpenAI API 키", type="password", placeholder="sk-...",
+                help="platform.openai.com/api-keys 에서 'Create new secret key'로 발급",
+            )
+            c1, c2 = st.columns([3, 2])
+            save_test = c1.button("🔌 연결 테스트 후 저장", type="primary", use_container_width=True)
+            save_only = c2.button("테스트 건너뛰고 저장", use_container_width=True)
+
+            if save_test or save_only:
+                k = (key or "").strip()
+                if not k.startswith("sk-"):
+                    st.error("키 형식이 올바르지 않습니다. 'sk-' 로 시작하는 키를 붙여넣어 주세요.")
+                elif save_only:
+                    config.save_api_key(k)
+                    st.success("저장했습니다. 시작합니다…")
+                    st.rerun()
+                else:
+                    with st.spinner("키 확인 중…"):
+                        ok, msg = _verify_key(k)
+                    if ok:
+                        config.save_api_key(k)
+                        st.success("키 확인 완료! 저장하고 시작합니다…")
+                        st.rerun()
+                    else:
+                        st.error(
+                            f"키가 동작하지 않습니다. 다시 확인해 주세요.\n\n`{msg}`\n\n"
+                            "회사 프록시/방화벽 환경이면 [테스트 건너뛰고 저장]을 눌러도 됩니다."
+                        )
+            st.caption(f"저장 위치: {config.USER_CONFIG_FILE}")
+
+
+def render_settings() -> None:
+    """키가 있을 때 — 상단의 작은 설정 패널에서 키 변경/삭제."""
+    with st.expander(f"⚙️ 설정 · OpenAI 키 ({config.mask_key()}) · 모델 {config.OPENAI_MODEL}", expanded=False):
+        st.caption(f"저장 위치: {config.USER_CONFIG_FILE} — 이 PC에만 보관됩니다.")
+        newk = st.text_input("키 변경", type="password", placeholder="새 키 입력 후 [변경 저장]", key="set_key")
+        c1, c2, _ = st.columns([2, 2, 4])
+        if c1.button("변경 저장"):
+            k = (newk or "").strip()
+            if k.startswith("sk-"):
+                config.save_api_key(k)
+                st.success("키를 변경했습니다.")
+                st.rerun()
+            else:
+                st.error("'sk-' 로 시작하는 키를 입력하세요.")
+        if c2.button("키 삭제(초기화)"):
+            config.clear_api_key()
+            st.rerun()
+
+
+# ============================================================
 # 한 화면 구성: 위에서 아래로 보면 그대로 작업 순서가 됩니다.
 #   ① 현황 요약  →  ② 수집(접이식)  →  ③ 생성·검토  →  ④ 작업 현황(접이식)
 # ============================================================
+# 키가 없으면 온보딩만 보여주고 멈춤 — 입력·저장하면 다음 실행부터 자동 통과
+if not config.has_api_key():
+    render_onboarding()
+    st.stop()
+
+render_settings()
+
 snap = build_snapshot()   # 제품 스캔/상태/이미지수를 한 번만 계산해 화면 전체가 공유
 
 render_summary(snap)
