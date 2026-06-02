@@ -36,13 +36,27 @@ echo [3/3] 실행파일 빌드 (PyInstaller)...
 pyinstaller --noconfirm --clean EduinoPostPilot.spec
 if errorlevel 1 ( echo [오류] 빌드 실패. 위 로그를 확인하세요. & pause & exit /b 1 )
 
+REM --- 내 바탕화면에 바로가기 자동 생성 (프로그램처럼 더블클릭 실행) ---
+set "TARGET=%~dp0dist\EduinoPostPilot\EduinoPostPilot.exe"
+if exist "%TARGET%" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+      "$ws=New-Object -ComObject WScript.Shell;" ^
+      "$lnk=$ws.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Eduino PostPilot.lnk');" ^
+      "$lnk.TargetPath='%TARGET%';" ^
+      "$lnk.WorkingDirectory='%~dp0dist\EduinoPostPilot';" ^
+      "$lnk.IconLocation='%TARGET%,0';" ^
+      "$lnk.Description='Eduino PostPilot - 블로그 초안 자동 생성';" ^
+      "$lnk.Save()"
+    echo   바탕화면에 'Eduino PostPilot' 아이콘을 만들었습니다.
+)
+
 echo.
 echo ============================================
 echo   빌드 완료!
 echo.
-echo   배포물:  dist\EduinoPostPilot\  폴더 전체
-echo   - 이 폴더를 통째로 압축(zip)해서 동료에게 전달하세요.
-echo   - 동료는 압축을 풀고  EduinoPostPilot.exe  를 더블클릭하면 됩니다.
+echo   - 바탕화면의 'Eduino PostPilot' 아이콘으로 바로 실행할 수 있습니다.
+echo   - 동료 배포: dist\EduinoPostPilot\ 폴더 전체를 압축(zip)해 전달하면,
+echo     동료는 압축을 풀고 EduinoPostPilot.exe 를 더블클릭하면 됩니다.
 echo   - Python 설치 불필요. 최초 실행 시 화면에서 OpenAI 키만 한 번 입력.
 echo ============================================
 echo.

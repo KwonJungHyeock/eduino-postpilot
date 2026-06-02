@@ -57,7 +57,7 @@ exe = EXE(
     name="EduinoPostPilot",
     console=True,            # 검은 서버창 유지(로그·종료). 닫으면 프로그램 종료
     disable_windowed_traceback=False,
-    icon=None,               # 아이콘 있으면 'assets/app.ico' 등으로 지정
+    icon="assets/app.ico",   # 실행파일·바로가기 아이콘
 )
 
 coll = COLLECT(
