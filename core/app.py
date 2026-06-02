@@ -13,12 +13,15 @@ Eduino_PostPilot - 메인 화면 (Streamlit)
 발행은 여전히 사람이 검토 후 수동으로 합니다(어뷰징 회피). 자동화는 '초안 재료
 수집'과 '초안 생성'까지입니다. 실행은 루트의 run.bat 으로 합니다.
 """
+import html as html_lib
+import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import config
 import image_loader
@@ -148,6 +151,14 @@ st.markdown(
     }
     .stButton > button:active { transform: scale(.99); }
     .stCode { border-radius:10px; }
+    /* 코드블록 복사 버튼 항상 보이게(원래는 hover 시에만 흐릿하게 떠서 안 보였음) */
+    div[data-testid="stCode"] > button,
+    div[data-testid="stCode"] [data-testid="stCodeCopyButton"],
+    [data-testid="stCodeCopyButton"] {
+        opacity: 1 !important; visibility: visible !important;
+        background:#ecfeff !important; border:1px solid #a5f0f7 !important;
+        border-radius:8px !important;
+    }
     label, .stMarkdown p { color:#334155; }
 
     /* 아이콘 폰트 복구 — 위의 전역 Pretendard 적용이 머티리얼 아이콘 폰트를
@@ -208,6 +219,103 @@ def block_label(text: str, color: str = "#94a3b8", note: str = "") -> None:
         f'<div class="blk"><span class="dot" style="background:{color}"></span>{text}{n}</div>',
         unsafe_allow_html=True,
     )
+
+
+_IMG_LINE = re.compile(r"^\[이미지\s*\d+", re.IGNORECASE)
+
+
+def _is_heading_line(s: str) -> bool:
+    """짧고 문장부호/종결어미로 끝나지 않는 줄 = 소제목으로 보고 볼드 처리."""
+    if len(s) > 22 or "," in s:
+        return False
+    return not re.search(r"(다|요|죠|함|음|까|네|죠|니다|세요|어요|아요)[.!?…]?$|[.!?…]$", s)
+
+
+def _parse_body(body: str) -> list[tuple[str, str]]:
+    """본문을 (종류, 텍스트) 줄 목록으로. 종류: img | head | para."""
+    out: list[tuple[str, str]] = []
+    for raw in body.splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        if _IMG_LINE.match(s):
+            out.append(("img", s))
+        elif _is_heading_line(s):
+            out.append(("head", s))
+        else:
+            out.append(("para", s))
+    return out
+
+
+def _body_copy_text(parsed: list[tuple[str, str]]) -> str:
+    """네이버에 붙여넣을 정리된 본문 — 이미지 자리/소제목 위아래로 빈 줄 확보."""
+    buf: list[str] = []
+    for kind, text in parsed:
+        if kind in ("img", "head"):
+            if buf and buf[-1] != "":
+                buf.append("")
+            buf.append(text)
+            buf.append("")
+        else:
+            buf.append(text)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(buf)).strip()
+
+
+def render_body_card(body: str) -> None:
+    """본문을 가독성 있게(이미지 자리 여백·소제목 볼드) 렌더 + 우측 상단 복사 버튼."""
+    parsed = _parse_body(body)
+    rows = []
+    for kind, text in parsed:
+        esc = html_lib.escape(text)
+        if kind == "img":
+            rows.append(f'<div class="imgrow">🖼 {esc}</div>')
+        elif kind == "head":
+            rows.append(f'<p class="hd">{esc}</p>')
+        else:
+            rows.append(f"<p>{esc}</p>")
+    inner = "".join(rows) or "<p>(본문 없음)</p>"
+    copy_js = json.dumps(_body_copy_text(parsed))
+
+    html = f"""
+    <div id="bw">
+      <button id="cpy" onclick="cp()">📋 복사</button>
+      <div id="bd">{inner}</div>
+    </div>
+    <script>
+    function cp() {{
+      const t = {copy_js};
+      const done = () => {{ const b=document.getElementById('cpy');
+        b.textContent='✓ 복사됨'; b.classList.add('ok');
+        setTimeout(()=>{{b.textContent='📋 복사'; b.classList.remove('ok');}},1500); }};
+      if (navigator.clipboard && window.isSecureContext) {{
+        navigator.clipboard.writeText(t).then(done).catch(()=>fallback(t,done));
+      }} else {{ fallback(t,done); }}
+    }}
+    function fallback(t,done) {{
+      const ta=document.createElement('textarea'); ta.value=t;
+      ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+      ta.select(); try{{document.execCommand('copy');}}catch(e){{}}
+      document.body.removeChild(ta); done();
+    }}
+    </script>
+    <style>
+      * {{ font-family:'Pretendard',-apple-system,sans-serif; box-sizing:border-box; }}
+      #bw {{ position:relative; }}
+      #cpy {{ position:absolute; top:0; right:0; z-index:5; cursor:pointer;
+              background:#7c3aed; color:#fff; border:none; border-radius:9px;
+              padding:7px 14px; font-weight:700; font-size:13px;
+              box-shadow:0 3px 8px rgba(124,58,237,.35); }}
+      #cpy.ok {{ background:#16a34a; }}
+      #bd {{ max-height:560px; overflow:auto; padding:6px 14px 6px 2px; margin-top:40px;
+             color:#1f2937; font-size:14px; line-height:1.85; }}
+      #bd p {{ margin:0 0 11px; }}
+      #bd p.hd {{ font-weight:800; color:#0f172a; margin:18px 0 9px; font-size:14.5px; }}
+      #bd .imgrow {{ margin:16px 0; padding:9px 13px; background:#f1f5f9;
+                     border:1px dashed #b6c2d3; border-radius:9px;
+                     color:#475569; font-size:13px; font-family:ui-monospace,monospace; }}
+    </style>
+    """
+    components.html(html, height=640, scrolling=False)
 
 
 def char_count(text: str) -> int:
@@ -441,8 +549,8 @@ def _render_result(blog: str, product) -> None:
     img_slots = re.findall(r"\[이미지\s*\d+[:：][^\]]*\]", body)
 
     # 본문은 길고, 나머지(제목·메타·태그·링크)는 짧음 → 좌(메타) / 우(본문) 2단.
-    # 각 항목을 색 점 라벨이 달린 소카드로 묶어 '어떤 영역인지' 바로 인지되게 한다.
-    left, right = st.columns([5, 6], gap="large")
+    # 본문 쪽을 넓게(가운데 여백 축소) 잡고, 각 항목을 색 점 라벨 소카드로 묶는다.
+    left, right = st.columns([4, 7], gap="small")
 
     with left:
         with st.container(border=True):
@@ -476,17 +584,13 @@ def _render_result(blog: str, product) -> None:
 
     with right:
         with st.container(border=True):
-            block_label("본문", "#7c3aed", "📋 복사")
-            st.code(body or "(본문 없음)", language=None)
+            block_label("본문", "#7c3aed", "우측 상단 버튼으로 복사 · 이미지 자리는 위아래 여백, 소제목은 볼드 자동 적용")
+            render_body_card(body or "")
             st.markdown(
                 f'<span class="count-box">본문 {char_count(body)}자(공백포함)</span>'
                 f'<span class="count-box">이미지 자리 {len(img_slots)}곳</span>',
                 unsafe_allow_html=True,
             )
-            if img_slots:
-                with st.expander(f"🖼 이미지 자리 {len(img_slots)}곳 - 통이미지에서 캡처해 삽입", expanded=True):
-                    for sslot in img_slots:
-                        st.write("- " + sslot)
 
     # 발행 영역 — 구분선으로 분리
     st.divider()
