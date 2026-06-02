@@ -39,179 +39,165 @@ st.markdown(
     """
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
-
-    /* 본문 폰트는 상속으로 적용. [class*="st-"]로 전 요소를 직접 지정하면
-       머티리얼 아이콘 <span>까지 덮어써 아이콘이 'check' 글자로 깨지므로 제외 */
+    /* 라운드형 한글 폰트(Jua) — 제목·브랜드 등 디스플레이 요소에 사용 */
+    @import url('https://cdn.jsdelivr.net/npm/@fontsource/jua/index.css');
+    /* 본문/입력은 가독성 위해 Pretendard, 디스플레이는 아래에서 Jua 지정 */
     html, body, .stApp, button, input, textarea, select {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
     }
+    html { font-size: 17px; }            /* 전체 글자 키움 */
+    /* 라운드 폰트(Jua)를 헤더·구간 제목·단계·버튼·라벨 등 눈에 띄는 요소에 적용 */
+    .brand-title, .brand-pill, .sec .t, .stepp .st, .blk,
+    .stButton > button, h1, h2, h3, h4,
+    [data-testid="stMetricValue"] {
+        font-family: 'Jua', 'Pretendard', sans-serif !important;
+    }
     .stApp {
         background:
-            radial-gradient(circle at 1px 1px, #e6ecf3 1px, transparent 0) 0 0 / 22px 22px,
-            #fafbfc;
+            radial-gradient(circle at 1px 1px, rgba(255,255,255,.035) 1px, transparent 0) 0 0 / 24px 24px,
+            radial-gradient(1100px 520px at 82% -8%, #16222f, transparent),
+            #0a0e16;
+        color:#c4cdd9;
     }
-    .block-container { padding-top: 3.2rem; padding-bottom: 3rem; max-width: 1240px; }
+    .block-container { padding-top: 2.4rem; padding-bottom: 4rem; max-width: 1260px; }
+    label, .stMarkdown p, .stMarkdown li { color:#aeb9c8; }
+    h1,h2,h3,h4,h5,h6, .stMarkdown h4 { color:#eef3f9 !important; }
 
+    /* ── 헤더 ── */
     .app-header {
-        display:flex; align-items:center; gap:15px;
-        padding: 6px 0 16px; margin-bottom: 16px;
-        border-bottom: 2px solid #f0e3e2;
+        display:flex; align-items:center; gap:16px;
+        padding: 4px 0 18px; margin-bottom: 22px;
+        border-bottom: 1px solid #1e2837;
     }
     .brand-mark {
-        width:56px; height:56px; border-radius:16px;
+        width:60px; height:60px; border-radius:19px;
         background: linear-gradient(135deg, #f0584d, #c92a22);
-        color:#fff; font-weight:800; font-size:30px;
+        color:#fff; font-weight:800; font-size:33px;
         display:flex; align-items:center; justify-content:center;
-        box-shadow: 0 8px 20px rgba(201,42,34,.32);
-        flex-shrink:0;
+        box-shadow: 0 10px 28px rgba(201,42,34,.45); flex-shrink:0;
     }
-    .brand-title { font-size:29px; font-weight:800; color:#0f172a; letter-spacing:-.6px; line-height:1.12; }
-    .brand-accent { color:#e3392e; }
-    .brand-sub { font-size:13px; color:#94a3b8; margin-top:3px; font-weight:600; letter-spacing:.2px; }
+    .brand-row { display:flex; align-items:center; gap:11px; }
+    .brand-title { font-size:31px; font-weight:800; color:#f2f6fb; letter-spacing:.4px; line-height:1.1; }
+    .brand-pill {
+        background:rgba(240,88,77,.16); color:#ff7a70; border:1px solid rgba(240,88,77,.42);
+        font-size:14px; font-weight:800; padding:3px 12px; border-radius:9px; letter-spacing:.6px;
+    }
+    .brand-sub { font-size:14px; color:#7c8a9c; margin-top:5px; font-weight:600; letter-spacing:.2px; }
 
-    .step-badge {
-        display:inline-block; background: linear-gradient(135deg, #f0584d, #c92a22);
-        color:#fff; border-radius:999px; padding:5px 16px;
-        font-size:.82rem; font-weight:700; margin-bottom:14px;
-        box-shadow: 0 3px 10px rgba(201,42,34,.28); letter-spacing:.2px;
+    /* ── 상단 단계 스테퍼: 번호 + 단계명 + 카운트 (순서/현황 한 줄에) ── */
+    .flowcard {
+        background:#10151e; border:1px solid #1f2937; border-radius:19px;
+        padding:16px 20px 18px; margin-bottom:24px;
+        box-shadow:0 1px 2px rgba(0,0,0,.3), 0 16px 36px rgba(0,0,0,.34);
     }
-    .count-box {
-        background:#f1f5f9; border:1px solid #e2e8f0; border-radius:9px;
-        padding:5px 12px; font-size:.82rem; color:#475569;
-        display:inline-block; margin:2px 6px 2px 0; font-weight:600;
+    .steps { display:flex; align-items:center; }
+    .stepp {
+        flex:1; display:flex; align-items:center; gap:12px; padding:11px 16px;
+        border-radius:14px; background:#141b27; border:1px solid #222d3d;
     }
-    /* 기본(primary) 버튼 — 브랜드 레드 그라데이션 */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #f0584d, #d12a20) !important;
-        box-shadow: 0 4px 12px rgba(201,42,34,.30) !important;
+    .stepp .sn {
+        width:30px; height:30px; border-radius:50%; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center;
+        font-weight:800; font-size:15px; background:#26313f; color:#9fb0c2;
     }
+    .stepp .st { font-weight:800; color:#aab6c6; font-size:1.04rem; line-height:1.12; }
+    .stepp .sc { font-size:.84rem; color:#6f7d8f; font-weight:600; margin-top:3px; }
+    .stepp.on   { background:rgba(240,88,77,.12); border-color:rgba(240,88,77,.55); }
+    .stepp.on .sn { background:linear-gradient(135deg,#f0584d,#d12a20); color:#fff; box-shadow:0 4px 11px rgba(201,42,34,.5); }
+    .stepp.on .st { color:#ff8077; }
+    .stepp.done .sn { background:#1f7a4d; color:#fff; }
+    .stepp.done .st { color:#d2dbe6; }
+    .conn { flex:0 0 22px; height:2px; background:#222d3d; }
 
+    /* ── 큰 카드(섹션) ── */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background:#ffffff; border-radius:18px; border:1px solid #e9eef4;
-        box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 14px 30px rgba(15,23,42,.055);
-        padding: 0 20px 18px;
+        background:#10151e; border-radius:20px; border:1px solid #1f2937;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 18px 42px rgba(0,0,0,.36);
+        padding: 0 22px 20px;
     }
 
-    /* 구간 헤더 — 카드 위쪽에 전체 폭 색 띠 + 컬러 아이콘 배지로 대비 강화 */
+    /* 구간 헤더 — 카드 상단 전체 폭 색 띠 + 컬러 번호 배지 */
     .sec {
-        display:flex; align-items:center; gap:11px;
-        margin: 0 -20px 16px; padding: 14px 20px;
-        background:#f1f5f9; border-bottom: 2px solid #cbd5e1;
-        border-radius: 18px 18px 0 0;
+        display:flex; align-items:center; gap:13px;
+        margin: 0 -22px 18px; padding: 17px 22px;
+        background:#161d29; border-bottom: 1px solid #232d3c;
+        border-radius: 20px 20px 0 0;
     }
     .sec .ic {
-        width:30px; height:30px; border-radius:9px; flex-shrink:0;
+        width:34px; height:34px; border-radius:11px; flex-shrink:0;
         display:flex; align-items:center; justify-content:center;
-        color:#fff; font-weight:800; font-size:15px;
-        background:var(--tone,#64748b); box-shadow:0 3px 7px rgba(0,0,0,.18);
+        color:#fff; font-weight:800; font-size:16px;
+        background:var(--tone,#5b6b7d); box-shadow:0 4px 10px rgba(0,0,0,.4);
     }
-    .sec .t  { font-weight:800; color:#0f172a; font-size:1.06rem; letter-spacing:-.2px; }
-    .sec .d  { color:#475569; font-size:.8rem; margin-left:auto; text-align:right; }
+    .sec .t  { font-weight:800; color:#eef3f9; font-size:1.2rem; letter-spacing:-.2px; }
+    .sec .d  { color:#7c8a9c; font-size:.88rem; margin-left:auto; text-align:right; }
 
-    /* 섹션 톤별 색 — 좌측 굵은 컬러 보더 + 진한 헤더 틴트 + 카드 배경 옅은 틴트(영역 구분) */
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){
-        border-left:6px solid #0891b2; background:#f4fdff;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){
-        border-left:6px solid #7c3aed; background:#fbf7ff;
-    }
-    .sec-gen{ --tone:#0891b2; background:#cffafe; border-bottom-color:#67e8f9; }
-    .sec-review{ --tone:#7c3aed; background:#f3e8ff; border-bottom-color:#d8b4fe; }
+    /* 섹션 톤별 색 — 좌측 굵은 컬러 보더 + 헤더 어두운 틴트 */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){ border-left:5px solid #22b8cf; }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){ border-left:5px solid #9775fa; }
+    .sec-gen{ --tone:#1b9fb5; background:#102229; border-bottom-color:#1d3b44; }
+    .sec-review{ --tone:#7c5cff; background:#1a1530; border-bottom-color:#2e2552; }
 
-    /* 검토 패널 내부 소영역 카드 — 흰 큰 카드 안에서 묶음을 가볍게 구분
-       (.sec 를 포함한 '큰 카드'는 제외해 헤더 카드 스타일이 깨지지 않게) */
+    /* 검토 패널 내부 소영역 카드 */
     div[data-testid="stVerticalBlockBorderWrapper"]:has(.subcard):not(:has(.sec)){
-        box-shadow:none; border:1px solid #e8edf3; background:#fbfcff;
-        border-radius:12px; padding: 2px 15px 12px;
+        box-shadow:none; border:1px solid #20293a; background:#0c111a;
+        border-radius:14px; padding: 4px 16px 14px;
     }
-    .blk { display:flex; align-items:center; gap:8px; margin:12px 0 8px;
-           font-weight:800; color:#0f172a; font-size:.94rem; }
+    .blk { display:flex; align-items:center; gap:9px; margin:13px 0 9px;
+           font-weight:800; color:#e6edf6; font-size:1.02rem; }
     .blk .dot { width:11px; height:11px; border-radius:3px; background:var(--bc,#94a3b8); flex-shrink:0; }
-    .blk small { font-weight:600; color:#94a3b8; font-size:.8rem; }
+    .blk small { font-weight:600; color:#6f7d8f; font-size:.84rem; }
 
-    /* 자동화 파이프라인 스테퍼 — 수집→생성→검토→발행 흐름을 한 줄에 시각화 */
-    .pipe { display:flex; align-items:stretch; margin:4px 0 14px; }
-    .pipe .stage {
-        flex:1; padding:14px 16px; background:#fff;
-        border:1px solid #eef2f7; border-top:3px solid var(--c);
-        border-radius:13px; position:relative;
-        box-shadow:0 1px 2px rgba(15,23,42,.04);
-    }
-    .pipe .stage + .stage { margin-left:26px; }
-    .pipe .stage::after {
-        content:'›'; position:absolute; right:-19px; top:50%;
-        transform:translateY(-50%); color:#cbd5e1; font-size:22px; font-weight:800;
-    }
-    .pipe .stage:last-child::after { content:''; }
-    .pipe .lbl { font-size:.82rem; color:#64748b; font-weight:700; display:flex; align-items:center; gap:6px; }
-    .pipe .num { font-size:1.7rem; font-weight:800; color:var(--c); line-height:1.15; }
-    .pipe .num small { font-size:.78rem; color:#94a3b8; font-weight:600; }
-
-    /* 현황 지표 칩 — 흰 카드 위에서도 구분되도록 옅은 회색 칩 */
-    div[data-testid="stMetric"] {
-        background:#f8fafc; border:1px solid #eef2f7; border-radius:14px;
-        padding: 12px 16px;
-    }
     .stButton > button {
-        border-radius:12px; font-weight:700; border:none;
+        border-radius:13px; font-weight:700; border:none; font-size:1rem;
         transition: transform .05s ease;
     }
     .stButton > button:active { transform: scale(.99); }
-    .stCode { border-radius:10px; }
-    /* 코드블록 복사 버튼 — 평소 은은하게 보이고(0.5), 올리면 또렷(1). 박스로 튀지 않게 */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #f0584d, #d12a20) !important;
+        box-shadow: 0 5px 14px rgba(201,42,34,.4) !important;
+    }
+    .count-box {
+        background:#161d29; border:1px solid #28323f; border-radius:10px;
+        padding:5px 13px; font-size:.86rem; color:#9fb0c2;
+        display:inline-block; margin:2px 6px 2px 0; font-weight:600;
+    }
+
+    /* 코드블록 복사 버튼 — 평소 은은(0.55), 올리면 또렷(1) */
     div[data-testid="stCode"] button,
-    [data-testid="stCodeCopyButton"] { opacity:.5 !important; transition:opacity .12s; }
+    [data-testid="stCodeCopyButton"] { opacity:.55 !important; transition:opacity .12s; }
     div[data-testid="stCode"]:hover button,
     div[data-testid="stCode"]:hover [data-testid="stCodeCopyButton"] { opacity:1 !important; }
-    label, .stMarkdown p { color:#334155; }
 
-    /* ── 가변(생성) 데이터 출력부 = 반투명 하이라이트 박스로 '적용된 값' 표시 ──
-       제목·메타·태그가 들어가는 st.code 를 형광펜처럼 반전 처리해 한눈에 인지 */
+    /* ── 가변(생성) 데이터 = 반투명 레드 하이라이트로 '적용된 값' 반전 표시 ── */
     div[data-testid="stCode"] {
-        background: rgba(227,57,46,.055) !important;
-        border:1px solid rgba(227,57,46,.16) !important;
-        border-left:4px solid #e3392e !important;
-        border-radius:10px !important;
+        background: rgba(240,88,77,.10) !important;
+        border:1px solid rgba(240,88,77,.28) !important;
+        border-left:4px solid #f0584d !important;
+        border-radius:11px !important;
     }
     div[data-testid="stCode"] pre, div[data-testid="stCode"] code {
-        background: transparent !important; color:#1f2937 !important;
+        background: transparent !important; color:#eef3f9 !important;
     }
-    /* 선택된 제목(라디오) 도 반전 — 어떤 후보를 적용했는지 표시 */
-    div[role="radiogroup"] label { padding:3px 8px; border-radius:8px; transition:background .12s; }
+    /* 선택된 제목(라디오) 반전 — 어떤 후보를 적용했는지 표시 */
+    div[role="radiogroup"] label { padding:4px 9px; border-radius:9px; transition:background .12s; }
     div[role="radiogroup"] label:has(input:checked) {
-        background: rgba(227,57,46,.08); box-shadow: inset 3px 0 0 #e3392e;
+        background: rgba(240,88,77,.14); box-shadow: inset 3px 0 0 #f0584d;
     }
-    /* 입력 위젯(텍스트영역 등) 도 옅은 반투명 — 채워넣는 영역임을 표시 */
-    .stTextArea textarea { background: rgba(245,158,11,.05) !important; }
+    /* 입력(채워넣는) 영역 옅은 앰버 틴트 */
+    .stTextArea textarea { background: rgba(240,180,80,.06) !important; }
 
-    /* 표(데이터프레임·에디터) — 찍어낸 기본 그리드 느낌 제거: 둥근 모서리 + 부드러운 테두리 */
+    /* 표 — 둥근 모서리 + 부드러운 테두리 */
     div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
-        border-radius:13px !important; overflow:hidden;
-        border:1px solid #e4e9f0 !important;
-        box-shadow:0 1px 2px rgba(15,23,42,.04), 0 6px 16px rgba(15,23,42,.05);
+        border-radius:14px !important; overflow:hidden;
+        border:1px solid #232d3c !important;
+        box-shadow:0 12px 28px rgba(0,0,0,.32);
     }
 
-    /* 작업 현황(상단) — 한 줄 컴팩트 카드로 영역 최소화 */
-    .wcard {
-        background:#fff; border:1px solid #ece3e2; border-left:5px solid #e3392e;
-        border-radius:15px; padding:13px 20px 15px; margin-bottom:16px;
-        box-shadow:0 1px 2px rgba(15,23,42,.04), 0 10px 24px rgba(15,23,42,.05);
-    }
-    .whead { display:flex; align-items:center; gap:8px; margin-bottom:11px; }
-    .whead .wdot { width:9px; height:9px; border-radius:3px; background:#e3392e; }
-    .whead b { font-size:1.02rem; color:#0f172a; letter-spacing:-.2px; }
-    .whead .wmeta { margin-left:auto; font-size:.79rem; color:#94a3b8; font-weight:600; }
-    .wbar { display:flex; }
-    .wstat {
-        flex:1; display:flex; flex-direction:column; align-items:center;
-        padding:3px 0; border-left:1px solid #f0f3f7;
-    }
-    .wstat:first-child { border-left:none; }
-    .wstat .wn { font-size:1.55rem; font-weight:800; color:var(--c,#475569); line-height:1.05; }
-    .wstat .wl { font-size:.76rem; color:#64748b; font-weight:700; margin-top:3px; }
-    .wprog { height:7px; background:#f0f3f7; border-radius:99px; margin-top:13px; overflow:hidden; }
-    .wfill { height:100%; background:linear-gradient(90deg,#e3392e,#f7867d); border-radius:99px; }
-    .wprog-t { font-size:.76rem; color:#94a3b8; font-weight:600; margin-top:6px; }
+    /* 진행 바(스테퍼 하단) */
+    .wprog { height:6px; background:#1a2230; border-radius:99px; margin-top:15px; overflow:hidden; }
+    .wfill { height:100%; background:linear-gradient(90deg,#f0584d,#ff8a80); border-radius:99px; }
+    .wprog-t { font-size:.84rem; color:#7c8a9c; font-weight:600; margin-top:8px; }
 
     /* 아이콘 폰트 복구 — 위의 전역 Pretendard 적용이 머티리얼 아이콘 폰트를
        덮어써서 체크/화살표가 'check', 'keyboard_arrow_right' 글자로 깨지는 것 방지 */
@@ -234,8 +220,8 @@ st.markdown(
     <div class="app-header">
       <div class="brand-mark">E</div>
       <div>
-        <div class="brand-title">Eduino <span class="brand-accent">AI</span></div>
-        <div class="brand-sub">AIoT 교육플랫폼</div>
+        <div class="brand-row"><span class="brand-title">EDUINO</span><span class="brand-pill">AI</span></div>
+        <div class="brand-sub">AIoT 교육플랫폼 · 블로그 자동화</div>
       </div>
     </div>
     """,
@@ -351,20 +337,26 @@ def render_body_card(body: str) -> None:
     }}
     </script>
     <style>
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+      @import url('https://cdn.jsdelivr.net/npm/@fontsource/jua/index.css');
+      html, body {{ background:transparent; }}
       * {{ font-family:'Pretendard',-apple-system,sans-serif; box-sizing:border-box; }}
+      #cpy, #bd p.hd {{ font-family:'Jua','Pretendard',sans-serif; }}
       #bw {{ position:relative; }}
       #bar {{ display:flex; justify-content:flex-end; margin-bottom:8px; }}
-      #cpy {{ cursor:pointer; background:#7c3aed; color:#fff; border:none; border-radius:9px;
-              padding:7px 15px; font-weight:700; font-size:13px;
-              box-shadow:0 3px 8px rgba(124,58,237,.35); }}
-      #cpy.ok {{ background:#16a34a; }}
+      #cpy {{ cursor:pointer; background:linear-gradient(135deg,#f0584d,#d12a20); color:#fff;
+              border:none; border-radius:10px; padding:8px 16px; font-weight:800; font-size:14px;
+              box-shadow:0 4px 11px rgba(201,42,34,.5); }}
+      #cpy.ok {{ background:#1f9d57; box-shadow:none; }}
       #bd {{ max-height:540px; overflow:auto; padding:2px 14px 2px 2px;
-             color:#1f2937; font-size:14px; line-height:1.85; }}
-      #bd p {{ margin:0 0 11px; }}
-      #bd p.hd {{ font-weight:800; color:#0f172a; margin:18px 0 9px; font-size:14.5px; }}
-      #bd .imgrow {{ margin:16px 0; padding:9px 13px; background:#f1f5f9;
-                     border:1px dashed #b6c2d3; border-radius:9px;
-                     color:#475569; font-size:13px; font-family:ui-monospace,monospace; }}
+             color:#cdd6e2; font-size:15.5px; line-height:1.9; }}
+      #bd p {{ margin:0 0 12px; }}
+      #bd p.hd {{ font-weight:800; color:#f2f6fb; margin:19px 0 9px; font-size:16px; }}
+      #bd .imgrow {{ margin:17px 0; padding:10px 14px; background:#161d29;
+                     border:1px dashed #38465c; border-radius:10px;
+                     color:#8fa0b4; font-size:13.5px; font-family:ui-monospace,monospace; }}
+      #bd::-webkit-scrollbar {{ width:9px; }}
+      #bd::-webkit-scrollbar-thumb {{ background:#2a3543; border-radius:9px; }}
     </style>
     """
     components.html(html, height=620, scrolling=False)
@@ -681,29 +673,39 @@ def render_summary(snap: dict) -> None:
     total = len(own)
     pct = (pub / total * 100) if total else 0
 
-    stages = [
-        ("#f59e0b", "🛰️ 수집", collected),
-        ("#0891b2", "✍️ 생성대기", todo),
-        ("#7c3aed", "📝 검토", draft),
-        ("#22c55e", "✅ 발행", pub),
+    # 현재 진행 단계 추정 — 작업 순서(수집→생성→검토→발행)에서 '지금 할 일' 강조
+    if collected == 0:
+        cur = 0
+    elif draft == 0 and pub == 0:
+        cur = 1
+    elif pub < total:
+        cur = 2
+    else:
+        cur = 3
+
+    steps = [
+        ("수집", f"{collected} 제품"),
+        ("생성", f"{todo} 미작업"),
+        ("검토", f"{draft} 초안"),
+        ("발행", f"{pub} 완료"),
     ]
-    cells = "".join(
-        f'<div class="wstat"><span class="wn" style="--c:{c}">{n}</span>'
-        f'<span class="wl">{lbl}</span></div>'
-        for c, lbl, n in stages
-    )
+    parts = []
+    for i, (name, sub) in enumerate(steps):
+        cls = "on" if i == cur else ("done" if i < cur else "")
+        parts.append(
+            f'<div class="stepp {cls}"><div class="sn">{i+1}</div>'
+            f'<div><div class="st">{name}</div><div class="sc">{sub}</div></div></div>'
+        )
+        if i < len(steps) - 1:
+            parts.append('<div class="conn"></div>')
     prog = (
         f'<div class="wprog"><div class="wfill" style="width:{pct:.0f}%"></div></div>'
-        f'<div class="wprog-t">자사 {total}개 중 {pub}개 발행 완료 · {pct:.0f}%</div>'
+        f'<div class="wprog-t">자사 {total}개 중 {pub}개 발행 완료 · {pct:.0f}% '
+        f'· 입점사 {ext}개 · 코드 {"·".join(config.OWN_CODE_PREFIXES)}=자사</div>'
         if total else ""
     )
     st.markdown(
-        f'<div class="wcard">'
-        f'  <div class="whead"><span class="wdot"></span><b>작업 현황</b>'
-        f'    <span class="wmeta">자사 {total} · 입점사 {ext} · 코드 {"·".join(config.OWN_CODE_PREFIXES)}=자사</span></div>'
-        f'  <div class="wbar">{cells}</div>'
-        f'  {prog}'
-        f'</div>',
+        f'<div class="flowcard"><div class="steps">{"".join(parts)}</div>{prog}</div>',
         unsafe_allow_html=True,
     )
 
@@ -847,11 +849,11 @@ def render_worklist(snap: dict) -> None:
 
 # 상태/구분 칸을 색 배지로 — 한눈에 진행도 파악
 _BADGE_CSS = {
-    "⚪ 미작업": "background:#eef2f7;color:#475569;",
-    "🟡 초안 생성됨": "background:#fef9c3;color:#854d0e;",
-    "🟢 발행 완료": "background:#dcfce7;color:#166534;",
-    "자사": "background:#cffafe;color:#0e7490;font-weight:700;",
-    "입점사": "background:#f1f5f9;color:#94a3b8;",
+    "⚪ 미작업": "background:#222b38;color:#9fb0c2;",
+    "🟡 초안 생성됨": "background:#3a3310;color:#f0d264;",
+    "🟢 발행 완료": "background:#123524;color:#5fd39a;",
+    "자사": "background:#0e3a44;color:#56d4e4;font-weight:700;",
+    "입점사": "background:#222b38;color:#7c8a9c;",
 }
 
 

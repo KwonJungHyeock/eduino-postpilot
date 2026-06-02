@@ -1,12 +1,12 @@
 # Eduino_PostPilot - Streamlit 테마/서버 설정
-# 밝은 테마 + 에듀이노 브랜드 레드 포인트 컬러로 고정
+# 다크 테마 + 에듀이노 브랜드 레드 포인트 컬러 (AI LAB 레퍼런스 톤)
 
 [theme]
-base = "light"
-primaryColor = "#e3392e"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f4f7fa"
-textColor = "#1e293b"
+base = "dark"
+primaryColor = "#f0584d"
+backgroundColor = "#0a0e16"
+secondaryBackgroundColor = "#141b27"
+textColor = "#e6edf3"
 font = "sans serif"
 
 [server]
