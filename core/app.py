@@ -96,6 +96,32 @@ st.markdown(
     .sec .t  { font-weight: 800; color:#0f172a; font-size: 1.04rem; letter-spacing:-.2px; }
     .sec .d  { color:#64748b; font-size:.8rem; margin-left:auto; text-align:right; }
 
+    /* 섹션 톤별 색 — 카드 좌측 컬러 보더 + 헤더 띠 색으로 구간을 색감 분리 */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-summary){ border-left:5px solid #6366f1; }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-gen){ border-left:5px solid #06b6d4; }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.sec-review){ border-left:5px solid #8b5cf6; }
+    .sec-summary{ background:linear-gradient(135deg,#eef2ff,#f5f3ff); border-bottom-color:#e0e7ff; }
+    .sec-gen{ background:linear-gradient(135deg,#ecfeff,#f0f9ff); border-bottom-color:#e0f2fe; }
+    .sec-review{ background:linear-gradient(135deg,#f5f3ff,#faf5ff); border-bottom-color:#ede9fe; }
+
+    /* 자동화 파이프라인 스테퍼 — 수집→생성→검토→발행 흐름을 한 줄에 시각화 */
+    .pipe { display:flex; align-items:stretch; margin:4px 0 14px; }
+    .pipe .stage {
+        flex:1; padding:14px 16px; background:#fff;
+        border:1px solid #eef2f7; border-top:3px solid var(--c);
+        border-radius:13px; position:relative;
+        box-shadow:0 1px 2px rgba(15,23,42,.04);
+    }
+    .pipe .stage + .stage { margin-left:26px; }
+    .pipe .stage::after {
+        content:'›'; position:absolute; right:-19px; top:50%;
+        transform:translateY(-50%); color:#cbd5e1; font-size:22px; font-weight:800;
+    }
+    .pipe .stage:last-child::after { content:''; }
+    .pipe .lbl { font-size:.82rem; color:#64748b; font-weight:700; display:flex; align-items:center; gap:6px; }
+    .pipe .num { font-size:1.7rem; font-weight:800; color:var(--c); line-height:1.15; }
+    .pipe .num small { font-size:.78rem; color:#94a3b8; font-weight:600; }
+
     /* 현황 지표 칩 — 흰 카드 위에서도 구분되도록 옅은 회색 칩 */
     div[data-testid="stMetric"] {
         background:#f8fafc; border:1px solid #eef2f7; border-radius:14px;
@@ -142,11 +168,15 @@ st.markdown(
 # ============================================================
 # 공통 헬퍼
 # ============================================================
-def section_header(icon: str, title: str, desc: str = "") -> None:
-    """카드 상단 전체 폭 색 띠 헤더 — 구간을 또렷하게 구분."""
+def section_header(icon: str, title: str, desc: str = "", tone: str = "") -> None:
+    """카드 상단 전체 폭 색 띠 헤더 — 구간을 색감으로 또렷하게 구분.
+
+    tone: ""|"summary"|"gen"|"review" — 헤더 띠/카드 좌측 보더 색을 결정.
+    """
+    cls = f"sec sec-{tone}" if tone else "sec"
     d = f'<span class="d">{desc}</span>' if desc else ""
     st.markdown(
-        f'<div class="sec"><span class="ic">{icon}</span>'
+        f'<div class="{cls}"><span class="ic">{icon}</span>'
         f'<span class="t">{title}</span>{d}</div>',
         unsafe_allow_html=True,
     )
@@ -275,7 +305,7 @@ def render_generate(snap: dict) -> None:
 
     # ---- ① 목록에서 선택 → 생성 (전체 폭: 제품명이 길어 좌우 분할 시 잘림) ----
     with st.container(border=True):
-        section_header("①", "생성할 제품 선택", "체크 → 선택한 만큼 한 번에 생성")
+        section_header("①", "생성할 제품 선택", "체크 → 선택한 만큼 한 번에 생성", tone="gen")
         f1, f2 = st.columns(2)
         own_only = f1.checkbox("자사제품만 보기", value=True,
                                help=f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사. "
@@ -335,7 +365,7 @@ def render_generate(snap: dict) -> None:
 
     # ---- ② 검토 · 복사 · 발행 ----
     with st.container(border=True):
-        section_header("②", "검토 · 복사 · 발행", "초안을 골라 네이버에 붙여넣고 발행")
+        section_header("②", "검토 · 복사 · 발행", "초안을 골라 네이버에 붙여넣고 발행", tone="review")
         reviewable = [p for p in products
                       if status_map.get(product_key(p), "none") in ("draft", "published")]
         if not reviewable:
@@ -446,7 +476,7 @@ def _render_result(blog: str, product) -> None:
 
 
 # ============================================================
-# 상단 현황 요약 — 한 화면에서 전체 진행을 한눈에
+# 상단 현황 — 자동화 파이프라인(수집→생성→검토→발행) 한눈에
 # ============================================================
 def render_summary(snap: dict) -> None:
     products = snap["products"]
@@ -457,14 +487,33 @@ def render_summary(snap: dict) -> None:
     def cnt(sts: str) -> int:
         return sum(1 for p in own if status_map.get(product_key(p), "none") == sts)
 
+    collected = len(products)
+    todo, draft, pub = cnt("none"), cnt("draft"), cnt("published")
+
     with st.container(border=True):
-        section_header("📊", "현황 요약",
-                       f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사제품(블로그 작성 대상)")
-        c = st.columns(4)
-        c[0].metric("⚪ 자사 미작업", cnt("none"))
-        c[1].metric("🟡 초안", cnt("draft"))
-        c[2].metric("🟢 발행", cnt("published"))
-        c[3].metric("🏷 입점사", ext, help="입점사 제품은 블로그 작성 대상이 아닙니다.")
+        section_header(
+            "📊", "자동화 현황",
+            f"코드 앞글자 {'·'.join(config.OWN_CODE_PREFIXES)} = 자사 · 입점사 {ext}개",
+            tone="summary",
+        )
+        stages = [
+            ("#f59e0b", "🛰️ 수집", collected, "제품"),
+            ("#06b6d4", "✍️ 생성 대기", todo, "미작업"),
+            ("#8b5cf6", "📝 검토", draft, "초안"),
+            ("#22c55e", "✅ 발행", pub, "완료"),
+        ]
+        cells = "".join(
+            f'<div class="stage" style="--c:{c}">'
+            f'<div class="lbl">{lbl}</div>'
+            f'<div class="num">{n}<small> {unit}</small></div></div>'
+            for c, lbl, n, unit in stages
+        )
+        st.markdown(f'<div class="pipe">{cells}</div>', unsafe_allow_html=True)
+
+        total = len(own)
+        if total:
+            ratio = pub / total
+            st.progress(ratio, text=f"자사 {total}개 중 {pub}개 발행 완료 · {ratio*100:.0f}%")
 
 
 # ============================================================
