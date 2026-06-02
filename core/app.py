@@ -46,11 +46,14 @@ st.markdown(
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     html { font-size: 17px; }            /* 전체 글자 키움 */
-    /* 라운드 폰트(Jua)를 헤더·구간 제목·단계·버튼·라벨 등 눈에 띄는 요소에 적용 */
+    /* 라운드 폰트(Jua)를 헤더·구간 제목·단계·버튼·라벨 등 눈에 띄는 요소에 적용.
+       Jua는 400 한 종류뿐 — 800을 주면 브라우저가 합성 볼드를 만들어 글자가 뭉개지므로
+       반드시 400으로 고정한다(이미 충분히 두툼한 라운드체). */
     .brand-title, .brand-pill, .sec .t, .stepp .st, .blk,
     .stButton > button, h1, h2, h3, h4,
     [data-testid="stMetricValue"] {
         font-family: 'Jua', 'Pretendard', sans-serif !important;
+        font-weight: 400 !important;
     }
     .stApp {
         background:
@@ -176,8 +179,13 @@ st.markdown(
         border-left:4px solid #f0584d !important;
         border-radius:11px !important;
     }
+    /* 코드블록 내용 — 기본 monospace는 한글이 띄엄띄엄 벌어져 정렬이 지저분.
+       비례 폰트(Pretendard) + 줄바꿈 정상화로 깔끔하게 왼쪽 정렬 */
     div[data-testid="stCode"] pre, div[data-testid="stCode"] code {
         background: transparent !important; color:#eef3f9 !important;
+        font-family:'Pretendard', sans-serif !important;
+        white-space: pre-wrap !important; word-break: break-word;
+        letter-spacing: 0 !important; text-align: left !important;
     }
     /* 선택된 제목(라디오) 반전 — 어떤 후보를 적용했는지 표시 */
     div[role="radiogroup"] label { padding:4px 9px; border-radius:9px; transition:background .12s; }
@@ -299,8 +307,8 @@ def _body_copy_text(parsed: list[tuple[str, str]]) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(buf)).strip()
 
 
-def render_body_card(body: str) -> None:
-    """본문을 가독성 있게(이미지 자리 여백·소제목 볼드) 렌더 + 우측 상단 복사 버튼."""
+def render_body_card(body: str, label: str = "본문", note: str = "") -> None:
+    """본문을 가독성 있게(이미지 자리 여백·소제목) 렌더. 제목과 복사 버튼을 한 줄에 정렬."""
     parsed = _parse_body(body)
     rows = []
     for kind, text in parsed:
@@ -313,10 +321,14 @@ def render_body_card(body: str) -> None:
             rows.append(f"<p>{esc}</p>")
     inner = "".join(rows) or "<p>(본문 없음)</p>"
     copy_js = json.dumps(_body_copy_text(parsed))
+    note_html = f'<small>{html_lib.escape(note)}</small>' if note else ""
 
     html = f"""
     <div id="bw">
-      <div id="bar"><button id="cpy" onclick="cp()">📋 본문 복사</button></div>
+      <div id="bar">
+        <span class="ttl"><span class="dt"></span>{html_lib.escape(label)}{note_html}</span>
+        <button id="cpy" onclick="cp()">📋 복사</button>
+      </div>
       <div id="bd">{inner}</div>
     </div>
     <script>
@@ -324,7 +336,7 @@ def render_body_card(body: str) -> None:
       const t = {copy_js};
       const done = () => {{ const b=document.getElementById('cpy');
         b.textContent='✓ 복사됨'; b.classList.add('ok');
-        setTimeout(()=>{{b.textContent='📋 본문 복사'; b.classList.remove('ok');}},1500); }};
+        setTimeout(()=>{{b.textContent='📋 복사'; b.classList.remove('ok');}},1500); }};
       if (navigator.clipboard && window.isSecureContext) {{
         navigator.clipboard.writeText(t).then(done).catch(()=>fallback(t,done));
       }} else {{ fallback(t,done); }}
@@ -341,17 +353,26 @@ def render_body_card(body: str) -> None:
       @import url('https://cdn.jsdelivr.net/npm/@fontsource/jua/index.css');
       html, body {{ background:transparent; }}
       * {{ font-family:'Pretendard',-apple-system,sans-serif; box-sizing:border-box; }}
-      #cpy, #bd p.hd {{ font-family:'Jua','Pretendard',sans-serif; }}
       #bw {{ position:relative; }}
-      #bar {{ display:flex; justify-content:flex-end; margin-bottom:8px; }}
-      #cpy {{ cursor:pointer; background:linear-gradient(135deg,#f0584d,#d12a20); color:#fff;
-              border:none; border-radius:10px; padding:8px 16px; font-weight:800; font-size:14px;
+      /* 제목(좌) + 복사 버튼(우) 한 줄 정렬 */
+      #bar {{ display:flex; align-items:center; gap:9px; margin-bottom:11px; }}
+      #bar .ttl {{ display:flex; align-items:center; gap:9px;
+                   font-family:'Jua','Pretendard',sans-serif; font-weight:400;
+                   color:#e6edf6; font-size:1.04rem; }}
+      #bar .ttl .dt {{ width:11px; height:11px; border-radius:3px; background:#9775fa; flex-shrink:0; }}
+      #bar .ttl small {{ font-family:'Pretendard',sans-serif; font-weight:600;
+                         color:#6f7d8f; font-size:.8rem; }}
+      #cpy {{ margin-left:auto; cursor:pointer; flex-shrink:0;
+              background:linear-gradient(135deg,#f0584d,#d12a20); color:#fff;
+              border:none; border-radius:10px; padding:8px 16px; font-weight:600; font-size:14px;
               box-shadow:0 4px 11px rgba(201,42,34,.5); }}
       #cpy.ok {{ background:#1f9d57; box-shadow:none; }}
       #bd {{ max-height:540px; overflow:auto; padding:2px 14px 2px 2px;
              color:#cdd6e2; font-size:15.5px; line-height:1.9; }}
       #bd p {{ margin:0 0 12px; }}
-      #bd p.hd {{ font-weight:800; color:#f2f6fb; margin:19px 0 9px; font-size:16px; }}
+      /* 소제목 — Jua는 400만 있어 합성 볼드(뭉개짐) 방지차 400 유지 */
+      #bd p.hd {{ font-family:'Jua','Pretendard',sans-serif; font-weight:400;
+                  color:#f2f6fb; margin:19px 0 9px; font-size:16.5px; }}
       #bd .imgrow {{ margin:17px 0; padding:10px 14px; background:#161d29;
                      border:1px dashed #38465c; border-radius:10px;
                      color:#8fa0b4; font-size:13.5px; font-family:ui-monospace,monospace; }}
@@ -628,8 +649,10 @@ def _render_result(blog: str, product) -> None:
 
     with right:
         with st.container(border=True):
-            block_label("본문", "#7c3aed", "우측 상단 버튼으로 복사 · 이미지 자리는 위아래 여백, 소제목은 볼드 자동 적용")
-            render_body_card(body or "")
+            # 제목과 복사 버튼을 한 줄에 두기 위해 라벨을 본문 카드(iframe) 안에서 렌더.
+            # 여기서는 소카드 스타일 마커만 심는다.
+            st.markdown('<span class="subcard"></span>', unsafe_allow_html=True)
+            render_body_card(body or "", "본문", "이미지 자리는 위아래 여백 · 소제목 강조")
             st.markdown(
                 f'<span class="count-box">본문 {char_count(body)}자(공백포함)</span>'
                 f'<span class="count-box">이미지 자리 {len(img_slots)}곳</span>',
