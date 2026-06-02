@@ -783,8 +783,35 @@ def render_worklist(snap: dict) -> None:
     if not rows:
         st.caption("해당 조건의 제품이 없습니다.")
     else:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(
+            _style_worklist(rows), use_container_width=True, hide_index=True,
+            column_config={"제품명": st.column_config.TextColumn(width="large")},
+        )
     st.caption("‘미작업’ 자사제품이 다음에 생성할 대상입니다. 위 [생성]에서 골라 만드세요.")
+
+
+# 상태/구분 칸을 색 배지로 — 한눈에 진행도 파악
+_BADGE_CSS = {
+    "⚪ 미작업": "background:#eef2f7;color:#475569;",
+    "🟡 초안 생성됨": "background:#fef9c3;color:#854d0e;",
+    "🟢 발행 완료": "background:#dcfce7;color:#166534;",
+    "자사": "background:#cffafe;color:#0e7490;font-weight:700;",
+    "입점사": "background:#f1f5f9;color:#94a3b8;",
+}
+
+
+def _style_worklist(rows: list[dict]):
+    """현황 표를 pandas Styler로 — 상태/구분 칸에 색 배지를 입힌다."""
+    import pandas as pd
+
+    df = pd.DataFrame(rows)
+
+    def cell(val):
+        base = "border-radius:8px;padding:3px 10px;font-weight:600;"
+        return base + _BADGE_CSS.get(val, "") if val in _BADGE_CSS else ""
+
+    styler = df.style.map(cell, subset=["구분", "상태"])
+    return styler
 
 
 # ============================================================
