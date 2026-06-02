@@ -133,7 +133,30 @@ Product_eduino\[1] A-1_아두이노 UNO R3 SMD 호환보드\detail.png
 
 ---
 
-## 7. 향후 고도화 후보
+## 7. 동료 배포 — 단독 실행파일(.exe)
+
+Python 설치조차 없이 **더블클릭만으로** 쓰게 하려면 실행파일로 묶어 배포합니다.
+
+### 빌드 (개발자 PC에서 1회, Windows)
+```cmd
+build_exe.bat        :: 더블클릭 — 가상환경·의존성·PyInstaller까지 자동
+```
+- 결과물: `dist\EduinoPostPilot\` 폴더 (PyInstaller onedir)
+- 내부 구조: `EduinoPostPilot.exe` + `_internal\`(런타임·리소스). exe만 떼지 말고 **폴더 전체**가 한 묶음.
+
+### 배포 & 사용 (동료)
+1. `dist\EduinoPostPilot\` 폴더를 통째로 **zip 압축** → 전달
+2. 동료는 압축 풀고 `EduinoPostPilot.exe` **더블클릭**
+3. 처음 한 번 화면에서 **OpenAI 키 입력** → 끝 (이후 자동)
+   - 생성 결과/제품 폴더는 exe 가 있는 폴더 옆에 `output\`, `Product_eduino\` 로 생깁니다.
+
+> 빌드 구성: `launcher.py`(진입점·테마 고정·키 프롬프트 억제) + `EduinoPostPilot.spec`(수집 명세).
+> 테마는 환경변수로 고정돼 `.streamlit/config.toml` 없이도 동일하게 적용됩니다.
+> macOS 배포가 필요하면 같은 spec 을 Mac에서 빌드하세요(OS별로 각각 빌드 필요).
+
+---
+
+## 8. 향후 고도화 후보
 
 - **Cafe24 OpenAPI 연동** — 현재 자동 수집은 스토어프론트 HTML 스크래핑. 자사 앱 등록 후
   OpenAPI(인증)로 바꾸면 봇 차단·구조 변경에 영향받지 않고 더 안정적 (crawler.py의

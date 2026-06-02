@@ -5,6 +5,7 @@ Eduino_PostPilot - 중앙 설정
 경로는 모두 자동 계산되므로 사용자가 직접 만질 필요가 없습니다.
 """
 import os
+import sys
 import json
 from pathlib import Path
 from dotenv import load_dotenv
@@ -15,17 +16,28 @@ from dotenv import load_dotenv
 CORE_DIR = Path(__file__).resolve().parent     # .../eduino-postpilot/core
 PROJECT_ROOT = CORE_DIR.parent                  # .../eduino-postpilot
 
-# .env 는 프로젝트 루트에서 로드
-load_dotenv(PROJECT_ROOT / ".env")
+# 실행파일(.exe)로 패키징(PyInstaller)되면 경로 기준이 달라집니다:
+#   - 쓰기 폴더(data/output/제품): exe 가 있는 폴더 → 영구 보관 + 사용자가 찾기 쉬움
+#   - 읽기 전용 리소스(prompts): 번들 폴더(_MEIPASS)
+# 일반 실행(파이썬)일 때는 둘 다 프로젝트 루트.
+if getattr(sys, "frozen", False):
+    APP_BASE = Path(sys.executable).resolve().parent
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", APP_BASE))
+else:
+    APP_BASE = PROJECT_ROOT
+    BUNDLE_DIR = PROJECT_ROOT
 
-DATA_DIR = PROJECT_ROOT / "data"        # SQLite 등
-OUTPUT_DIR = PROJECT_ROOT / "output"    # 생성 결과
-PROMPTS_DIR = PROJECT_ROOT / "prompts"  # 프롬프트 템플릿
+# .env 는 exe(또는 프로젝트) 폴더에서 로드 (선택 사항)
+load_dotenv(APP_BASE / ".env")
+
+DATA_DIR = APP_BASE / "data"          # SQLite 등 (쓰기)
+OUTPUT_DIR = APP_BASE / "output"      # 생성 결과 (쓰기)
+PROMPTS_DIR = BUNDLE_DIR / "prompts"  # 프롬프트 템플릿 (읽기 전용)
 
 # 상세페이지 통이미지 루트
 #   - .env에 PRODUCTS_ROOT 값이 있으면 그것을 사용
-#   - 비어있으면 프로젝트 루트의 Product_eduino 폴더를 자동 사용
-PRODUCTS_ROOT = Path(os.getenv("PRODUCTS_ROOT") or (PROJECT_ROOT / "Product_eduino"))
+#   - 비어있으면 실행 폴더의 Product_eduino 폴더를 자동 사용
+PRODUCTS_ROOT = Path(os.getenv("PRODUCTS_ROOT") or (APP_BASE / "Product_eduino"))
 
 # ------------------------------------------------------------
 # 사용자별 설정 저장 (최초 1회 키 입력 → 이 PC에 저장 → 다음부터 자동)
@@ -180,8 +192,8 @@ CRAWL_CATEGORIES: dict[str, int] = {}
 
 STATE_DB = DATA_DIR / "state.db"
 
-# 폴더 자동 생성
-for _d in (DATA_DIR, OUTPUT_DIR, PROMPTS_DIR):
+# 쓰기 폴더만 자동 생성 (PROMPTS_DIR 는 번들/소스에 이미 존재)
+for _d in (DATA_DIR, OUTPUT_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 
